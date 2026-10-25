@@ -15,12 +15,17 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Install SDK
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - name: Install Android SDK 34
+        shell: bash
+        run: |
+          test -d "$ANDROID_HOME" || { echo 'Android SDK unavailable'; exit 1; }
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-34' 'build-tools;34.0.0'
       - name: Unit tests
         run: gradle --no-daemon testDebugUnitTest
       - name: Build APK
