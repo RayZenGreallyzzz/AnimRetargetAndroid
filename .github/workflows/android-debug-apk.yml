@@ -1,13 +1,14 @@
-name: Build Anim Retarget GLB + BVH test APK
+name: Build Anim Retarget 1.1.4 dark GLB BVH APK
 
 on:
   push:
-    branches: [glb-bvh-integrated-test]
+    branches: [glb-dark-retarget-v114]
     paths:
       - 'payload/AnimRetargetAndroid_sources.b64'
       - '.github/workflows/android-debug-apk.yml'
       - 'hotfix/retarget_math_hotfix.py'
       - 'hotfix/bvh_integrated_fix.py'
+      - 'hotfix/dark_root_safe_v114.py'
   workflow_dispatch:
 
 permissions:
@@ -36,6 +37,9 @@ jobs:
       - name: Apply bind pose and BVH hip fixes without replacing GLB app
         run: python3 hotfix/bvh_integrated_fix.py AnimRetargetAndroid
 
+      - name: Restore dark UI and fix unmapped root BVH motion
+        run: python3 hotfix/dark_root_safe_v114.py AnimRetargetAndroid
+
       - name: Verify original GLB UI preserved
         shell: bash
         run: |
@@ -43,6 +47,8 @@ jobs:
           test -f AnimRetargetAndroid/app/src/main/java/com/animretarget/app/Json.kt
           grep -q 'Glb.parse' AnimRetargetAndroid/app/src/main/java/com/animretarget/app/MainActivity.kt
           grep -q 'Pipeline.convertGlb' AnimRetargetAndroid/app/src/main/java/com/animretarget/app/MainActivity.kt
+          grep -q 'Theme.Material3.Dark.NoActionBar' AnimRetargetAndroid/app/src/main/res/values/themes.xml
+          grep -q '1.1.4-dark-bvh-test' AnimRetargetAndroid/app/build.gradle.kts
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -72,7 +78,7 @@ jobs:
       - name: Upload installation APK
         uses: actions/upload-artifact@v4
         with:
-          name: AnimRetargetAndroid-GLB-BVH-Test-APK
+          name: AnimRetargetAndroid-1.1.4-Dark-GLB-BVH-Test-APK
           path: AnimRetargetAndroid/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
