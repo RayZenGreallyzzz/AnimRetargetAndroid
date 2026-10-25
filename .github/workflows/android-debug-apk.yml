@@ -6,6 +6,7 @@ on:
     paths:
       - 'payload/AnimRetargetAndroid_sources.b64'
       - '.github/workflows/android-debug-apk.yml'
+      - 'hotfix/retarget_math_hotfix.py'
   workflow_dispatch:
 
 permissions:
@@ -27,6 +28,9 @@ jobs:
           tar -xjf /tmp/animretarget-source.tar.bz2
           test -f AnimRetargetAndroid/app/build.gradle.kts
           test -f AnimRetargetAndroid/app/src/main/java/com/animretarget/app/Glb.kt
+
+      - name: Apply tested BVH rotation hotfix
+        run: python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
