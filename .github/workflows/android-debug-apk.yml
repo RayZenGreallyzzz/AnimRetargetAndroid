@@ -23,7 +23,7 @@ jobs:
         run: |
           test -s payload/AnimRetargetAndroid_sources.b64
           base64 -d payload/AnimRetargetAndroid_sources.b64 > /tmp/animretarget-source.tar.bz2
-          echo '5cd1f7089a76aa34b8b36bb4db07afd58c40bb676a9ebad8984d8f1e705073e2  /tmp/animretarget-source.tar.bz2' | sha256sum -c -
+          echo '18c9b6025a2567c4f2a004aab12213c2d1b26649c258427375bef6ef350e9f56  /tmp/animretarget-source.tar.bz2' | sha256sum -c -
           tar -xjf /tmp/animretarget-source.tar.bz2
           test -f AnimRetargetAndroid/app/build.gradle.kts
           test -f AnimRetargetAndroid/app/src/main/java/com/animretarget/app/Glb.kt
