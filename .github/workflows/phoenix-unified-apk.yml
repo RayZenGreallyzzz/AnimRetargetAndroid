@@ -1,0 +1,118 @@
+name: Phoenix Unified Studio (integration test)
+on:
+  workflow_dispatch:
+    inputs:
+      rig_ref:
+        description: 'Rig Animation Studio ref (default: Android branch; verify v7.5 commit before release)'
+        required: true
+        default: 'android-rig-animation-studio'
+      character_ref:
+        description: 'Character Studio ref'
+        required: true
+        default: 'main'
+  push:
+    branches: [integration/phoenix-character-suite]
+    paths:
+      - 'integration/**'
+      - '.github/workflows/phoenix-unified-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unified-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Anim Retarget
+        uses: actions/checkout@v4
+
+      - name: Fetch source copies (never modify originals)
+        env:
+          RIG_REF: ${{ inputs.rig_ref || 'android-rig-animation-studio' }}
+          CHARACTER_REF: ${{ inputs.character_ref || 'main' }}
+        run: |
+          git clone --depth 1 --branch "$RIG_REF" https://github.com/RayZenGreallyzzz/mesh2motion-app.git /tmp/phoenix-rig
+          git clone --depth 1 --branch "$CHARACTER_REF" https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/phoenix-character
+          echo "Rig source SHA: $(git -C /tmp/phoenix-rig rev-parse HEAD)"
+          echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)"
+          printf 'rig_sha=%s\ncharacter_sha=%s\n' "$(git -C /tmp/phoenix-rig rev-parse HEAD)" "$(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Build Rig Animation Studio web module
+        working-directory: /tmp/phoenix-rig
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          test -s dist/create.html
+
+      - name: Test and build Character Studio web module
+        working-directory: /tmp/phoenix-character
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          npm run build -- --base=./
+          test -s dist/index.html
+
+      - name: Verify and extract original Anim Retarget Kotlin sources
+        shell: bash
+        run: |
+          test -s payload/AnimRetargetAndroid_sources.b64
+          base64 -d payload/AnimRetargetAndroid_sources.b64 > /tmp/animretarget-source.tar.bz2
+          echo '18c9b6025a2567c4f2a004aab12213c2d1b26649c258427375bef6ef350e9f56  /tmp/animretarget-source.tar.bz2' | sha256sum -c -
+          tar -xjf /tmp/animretarget-source.tar.bz2
+          test -f AnimRetargetAndroid/app/src/main/AndroidManifest.xml
+          test -f AnimRetargetAndroid/app/build.gradle.kts
+
+      - name: Apply existing BVH hotfix
+        run: python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
+
+      - name: Insert offline editors and launcher into retarget app
+        run: |
+          python3 integration/inject_suite.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1 | xargs -r -I{} sh -c 'yes | "{}" --licenses >/dev/null 2>&1 || true'
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          "$SDKMANAGER" 'platforms;android-34' 'build-tools;34.0.0'
+
+      - name: Build single offline APK
+        working-directory: AnimRetargetAndroid
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Prepare source provenance
+        run: |
+          mkdir -p integration-output
+          cp /tmp/phoenix-source-revisions.txt integration-output/source-revisions.txt
+          sha256sum AnimRetargetAndroid/app/build/outputs/apk/debug/*.apk > integration-output/apk-sha256.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixUnifiedStudio-test-APK
+          path: AnimRetargetAndroid/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixUnifiedStudio-source-refs
+          path: integration-output/
+          retention-days: 30
