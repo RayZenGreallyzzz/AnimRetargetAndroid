@@ -1,25 +1,16 @@
-name: Phoenix Unified Studio (integration test)
+name: Phoenix Unified Studio — exact Rig Studio 7.6 APK
 on:
   workflow_dispatch:
     inputs:
-      rig_ref:
-        description: 'Rig Animation Studio ref (default: Android branch; verify v7.5 commit before release)'
+      rig_apk_url:
+        description: 'HTTPS link to exact Rig-Animation-Studio-v7.6-Chest-Guard-test.apk (public release asset)'
         required: true
-        default: 'android-rig-animation-studio'
+        type: string
       character_ref:
-        description: 'Character Studio ref'
+        description: 'Character Studio source ref'
         required: true
         default: 'main'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'integration/**'
-      - '.github/workflows/phoenix-unified-apk.yml'
-  push:
-    branches: [integration/phoenix-character-suite]
-    paths:
-      - 'integration/**'
-      - '.github/workflows/phoenix-unified-apk.yml'
+        type: string
 
 permissions:
   contents: read
@@ -32,34 +23,27 @@ jobs:
       - name: Checkout Anim Retarget
         uses: actions/checkout@v4
 
-      - name: Fetch source copies (never modify originals)
+      - name: Fetch Character Studio copy (original stays untouched)
         env:
-          RIG_REF: ${{ inputs.rig_ref || 'android-rig-animation-studio' }}
           CHARACTER_REF: ${{ inputs.character_ref || 'main' }}
         run: |
-          git clone --depth 1 --branch "$RIG_REF" https://github.com/RayZenGreallyzzz/mesh2motion-app.git /tmp/phoenix-rig
           git clone --depth 1 --branch "$CHARACTER_REF" https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/phoenix-character
-          # Pin default Android branch snapshot; v7.5 label still needs verification.
-          EXPECTED_RIG_SHA=2bb1b8617bc79411cd65cc1d6f69018169c2168d
-          if [ "$RIG_REF" = "android-rig-animation-studio" ]; then
-            test "$(git -C /tmp/phoenix-rig rev-parse HEAD)" = "$EXPECTED_RIG_SHA" || {
-              echo "::error::Rig branch changed; verify v7.5 source before building"; exit 1;
-            }
-          fi
-          echo "Rig source SHA: $(git -C /tmp/phoenix-rig rev-parse HEAD)"
-          echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)"
-          printf 'rig_sha=%s\ncharacter_sha=%s\n' "$(git -C /tmp/phoenix-rig rev-parse HEAD)" "$(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
+          echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
+
+      - name: Download and verify user-supplied Rig Studio 7.6
+        env:
+          RIG_APK_URL: ${{ inputs.rig_apk_url }}
+        shell: bash
+        run: |
+          test -n "$RIG_APK_URL" || { echo "::error::Exact v7.6 APK URL required; no fallback to old Rig"; exit 1; }
+          case "$RIG_APK_URL" in https://*) ;; *) echo "::error::Only HTTPS download links are allowed"; exit 1;; esac
+          curl --fail --show-error --silent --location --retry 3 --max-time 300 "$RIG_APK_URL" -o /tmp/rig-studio-v76.apk
+          echo "rig_apk_sha256=$(sha256sum /tmp/rig-studio-v76.apk | cut -d' ' -f1)" >> /tmp/phoenix-source-revisions.txt
+          python3 integration/extract_rig_v76.py /tmp/rig-studio-v76.apk /tmp/phoenix-rig/dist
 
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-
-      - name: Build Rig Animation Studio web module
-        working-directory: /tmp/phoenix-rig
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
-          test -s dist/create.html
 
       - name: Test and build Character Studio web module
         working-directory: /tmp/phoenix-character
