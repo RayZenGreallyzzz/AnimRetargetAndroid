@@ -295,7 +295,7 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
                 val basename = output.nameWithoutExtension
                 val ext = output.extension.let {if(it.isEmpty()) "" else ".$it"}
                 var counter = 2
-                while(output.exists()) output = File(directory, "\${basename}_\${counter++}$ext")
+                while(output.exists()) output = File(directory, basename + "_" + (counter++) + ext)
             }
             val success = pendingTemp!!.renameTo(output)
             reset()
