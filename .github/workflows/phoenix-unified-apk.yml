@@ -98,6 +98,14 @@ jobs:
         working-directory: AnimRetargetAndroid
         run: gradle --no-daemon --stacktrace assembleDebug
 
+      - name: Verify APK signing and ZIP alignment before publishing
+        shell: bash
+        run: |
+          APK="AnimRetargetAndroid/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/zipalign" -c -v 4 "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose "$APK"
+
       - name: Prepare source provenance
         run: |
           mkdir -p integration-output
