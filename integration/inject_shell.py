@@ -73,6 +73,8 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     retarget = original_launcher(root)
     application = root.find("application")
     assert application is not None
+    # Distinct Android icon/label: never silently overwrite an installed Anim Retarget.
+    application.set(LABEL, "Phoenix Character Suite")
     if retarget == "com.animretarget.app.StudioWebActivity":
         raise RuntimeError("Refusing to integrate twice")
     if any(a.get(NAME) == "com.animretarget.app.StudioWebActivity"
@@ -110,7 +112,11 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     gradle = gradle_file.read_text(encoding="utf-8")
     if "androidx.webkit:webkit:" not in gradle:
         gradle += '\n// Secure offline HTML asset handling for Phoenix Studio.\ndependencies { implementation("androidx.webkit:webkit:1.11.0") }\n'
-        gradle_file.write_text(gradle, encoding="utf-8")
+    # This APK is a NEW app, not an update to the user's original Retarget.
+    # Preserve the package/namespace of every original Kotlin class.
+    if 'applicationIdSuffix' not in gradle:
+        gradle += '\n// Install independently of AnimRetargetAndroid.\nandroid { defaultConfig { applicationIdSuffix = ".suite" } }\n'
+    gradle_file.write_text(gradle, encoding="utf-8")
 
     native = (integration_root / "kotlin/StudioWebActivity.kt").read_text(encoding="utf-8")
     native = native.replace("__NATIVE_RETARGET_ACTIVITY__", retarget)
