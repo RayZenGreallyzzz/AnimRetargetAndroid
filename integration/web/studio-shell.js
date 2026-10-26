@@ -18,7 +18,7 @@
     ".phoenix-workspace .file{display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid #3c4250;padding:7px 0;flex-wrap:wrap}",
     ".phoenix-workspace .file span{word-break:break-word;flex:1;min-width:140px}.phoenix-workspace .footer{display:flex;justify-content:flex-end;gap:7px}",
     ".phoenix-workspace select{padding:9px;color:#fff;background:#2b3442;border-radius:6px;max-width:100%}",
-    "@media(max-width:770px){.ras-nav{flex-wrap:wrap!important;gap:6px!important;padding-top:6px!important}.phoenix-suite-tabs{width:100%;order:2}.phoenix-suite-tabs button{font-size:11px;min-height:38px;padding:5px 8px}}"
+    "@media(max-width:770px){.ras-nav{height:auto!important;min-height:96px!important;flex-wrap:wrap!important;gap:6px!important;padding:5px 8px!important}.phoenix-suite-tabs{width:100%;order:2}.phoenix-suite-tabs button{font-size:11px;min-height:38px;padding:5px 8px}#tool-panel{top:104px!important;max-height:calc(100dvh - 115px)!important}}"
   ].join("\n");
 
   const css = document.createElement("style"); css.textContent = rules; document.head.appendChild(css);
