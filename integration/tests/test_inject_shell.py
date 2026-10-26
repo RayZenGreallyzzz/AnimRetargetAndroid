@@ -49,6 +49,8 @@ class MergeSmokeTests(unittest.TestCase):
             self.assertIn("com.animretarget.app.MainActivity",output.read_text())
             self.assertIn("PhoenixWorkspaceBridge",output.read_text())
             self.assertEqual((rig/"create.html").read_bytes(),original)
+            self.assertIn('applicationIdSuffix = ".suite"', gradle.read_text())
+            self.assertEqual(app.get("{"+NS+"}label"),"Phoenix Character Suite")
 
 if __name__=="__main__":
     unittest.main()
