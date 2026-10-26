@@ -34,6 +34,13 @@ jobs:
         run: |
           git clone --depth 1 --branch "$RIG_REF" https://github.com/RayZenGreallyzzz/mesh2motion-app.git /tmp/phoenix-rig
           git clone --depth 1 --branch "$CHARACTER_REF" https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/phoenix-character
+          # Pin default Android branch snapshot; v7.5 label still needs verification.
+          EXPECTED_RIG_SHA=2bb1b8617bc79411cd65cc1d6f69018169c2168d
+          if [ "$RIG_REF" = "android-rig-animation-studio" ]; then
+            test "$(git -C /tmp/phoenix-rig rev-parse HEAD)" = "$EXPECTED_RIG_SHA" || {
+              echo "::error::Rig branch changed; verify v7.5 source before building"; exit 1;
+            }
+          fi
           echo "Rig source SHA: $(git -C /tmp/phoenix-rig rev-parse HEAD)"
           echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)"
           printf 'rig_sha=%s\ncharacter_sha=%s\n' "$(git -C /tmp/phoenix-rig rev-parse HEAD)" "$(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
@@ -72,6 +79,7 @@ jobs:
 
       - name: Insert offline editors and launcher into retarget app
         run: |
+          python3 -m py_compile integration/inject_suite.py
           python3 integration/inject_suite.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
