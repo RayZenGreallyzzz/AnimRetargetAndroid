@@ -64,6 +64,11 @@ jobs:
           npm run build -- --base=./
           test -s dist/index.html
 
+      - name: Test unified tabs and manifest injector
+        run: |
+          node --check integration/web/studio-shell.js
+          python3 -m unittest discover -s integration/tests -v
+
       - name: Verify and extract original Anim Retarget Kotlin sources
         shell: bash
         run: |
@@ -77,10 +82,10 @@ jobs:
       - name: Apply existing BVH hotfix
         run: python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
 
-      - name: Insert offline editors and launcher into retarget app
+      - name: Use original Rig menu as unified default tab
         run: |
-          python3 -m py_compile integration/inject_suite.py
-          python3 integration/inject_suite.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist
+          python3 -m py_compile integration/inject_shell.py
+          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
 
