@@ -40,6 +40,30 @@ def verify(path):
             present=all(name in names for name in heads)
             if present!=(bits[feature]=='1'):
                 raise RuntimeError('Wrong optional bones '+flags+'/'+str(feature))
+        # Check real mirrored world positions on the base rig, not local
+        # coordinates (converted FBX root and Spine bones have rotated axes).
+        parents={child:i for i,node in enumerate(nodes) for child in node.get('children',[])}
+        cache={}
+        def global_node(i):
+            if i not in cache:
+                local=local_matrix(nodes[i])
+                cache[i]=mul(global_node(parents[i]),local) if i in parents else local
+            return cache[i]
+        def pos(name):
+            m=global_node(names.index(name))
+            return [m[12],m[13],m[14]]
+        def dot(a,b):return sum(x*y for x,y in zip(a,b))
+        def sub(a,b):return [x-y for x,y in zip(a,b)]
+        left=sub(pos('upperarm_l'),pos('upperarm_r'))
+        for name_l,name_r in [('breast_l','breast_r'),('wing_01_l','wing_01_r'),('ear_01_l','ear_01_r')]:
+            if name_l in names and name_r in names:
+                if dot(sub(pos(name_l),pos(name_r)),left)<=.001:
+                    raise RuntimeError('Anatomical L/R reversed for '+name_l+'/'+flags)
+                if dot(sub(pos(name_r),pos(name_l)),left)>=-.001:
+                    raise RuntimeError('Anatomical R/L reversed for '+name_r+'/'+flags)
+        if 'tail_01' in names:
+            if pos('tail_01')[1]>=pos('pelvis')[1]:
+                raise RuntimeError('Tail root should be below hips in template bind pose')
         if flags!='0000':
             expected={'breast_l':'spine_03','breast_r':'spine_03','tail_01':'pelvis',
                       'wing_01_l':'spine_03','wing_01_r':'spine_03',
