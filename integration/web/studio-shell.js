@@ -1,4 +1,4 @@
-/* Phoenix Unified Studio shared navigation + offline project workspace.
+/* Phoenix Character Forge shared navigation + offline project workspace.
    Bundled into COPIES of Rig Animation Studio and Character Studio; originals unchanged. */
 (() => {
   "use strict";
@@ -57,8 +57,8 @@
     panel.className = "phoenix-workspace";
     const files = (() => {try {return JSON.parse(call("listFiles") || "[]")} catch {return []}})();
     const targets = chosenInputs();
-    panel.innerHTML = '<h3>Общие файлы Phoenix</h3>'
-     +'<p>Экспортированные модели хранятся в памяти приложения. Выбери файл и импортируй его в активный редактор. Для Retarget сохрани файл через «Поделиться в файлы» и выбери его обычным импортом.</p>'
+    panel.innerHTML = '<h3>Файлы Phoenix Character Forge</h3>'
+     +'<p>Экспортированные модели хранятся во внутреннем хранилище приложения. Выбери файл и импортируй его в активный редактор. Для Retarget сохрани файл через «Поделиться в файлы» и выбери его обычным импортом.</p>'
      +'<label>Куда загрузить: <select id="phoenix-target">'+targets.map(t =>'<option value="'+t.id+'">'+escapeHTML(t.label)+'</option>').join("")+'</select></label>'
      + '<div id="phoenix-files"></div><div class="footer"><button id="phoenix-close">Закрыть</button></div>';
     const listing = panel.querySelector("#phoenix-files");
@@ -126,9 +126,17 @@
     toast("Загружено в "+(tool==="rig"?"Rig":"Character")+": "+name);
   }
   function buildTabs() {
+    document.title = "Phoenix Character Forge — " + (tool === "rig" ? "Риг и анимация" : "Персонаж");
+    const subheading = document.querySelector(".ras-brand-copy strong");
+    if (subheading) subheading.textContent = "Phoenix Character Forge";
+    const characterName = document.querySelector("header .brand strong");
+    if (characterName) characterName.textContent = "PHOENIX CHARACTER FORGE";
+    const characterTagline = document.querySelector("header .brand small");
+    if (characterTagline) characterTagline.textContent = "RIG · RETARGET · CHARACTER";
     const host = tool==="rig" ? (document.querySelector(".ras-nav") || document.body) : (document.querySelector("header")||document.body);
     if(document.getElementById("phoenix-suite-tabs")) return;
     const tabs=document.createElement("div");tabs.id="phoenix-suite-tabs";tabs.className="phoenix-suite-tabs";
+    tabs.setAttribute("aria-label", "Phoenix Character Forge — редакторы");
     const items=[
       {tool:"rig",label:"🦴 Риг и анимация"},
       {tool:"retarget",label:"🔁 Ретаргетинг"},
