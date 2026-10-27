@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {normalizedTop4,simplifyGeometry,closestSegmentDistanceSq,guardSkinToCapsules} from './mesh-tools.js';
+import {normalizedTop4,simplifyGeometry,closestSegmentDistanceSq,guardSkinToCapsules,getBindCapsules} from './mesh-tools.js';
 
 test('top-four joint weights normalize and keep highest influences',()=>{
   const result=normalizedTop4([[2,.3],[3,.1],[4,.2],[5,.3],[6,.1],[2,.1]]);
@@ -79,4 +79,74 @@ test('capsule guard renormalizes existing clothing weights and leaves original i
   }
   assert.ok(closestSegmentDistanceSq(new THREE.Vector3(0,0.4,0),c[0].start,c[0].end)<1e-9);
   out.geometry.dispose();g.dispose();
+});
+
+
+test('bind pose capsules stay aligned even when mesh world position changes',()=>{
+  const bone0=new THREE.Bone(),bone1=new THREE.Bone();bone0.name='UpperArm';bone1.name='Forearm';
+  bone0.add(bone1);
+  const g=new THREE.BufferGeometry();
+  const pts=[],joint=[],weight=[];
+  for(let k=0;k<20;k++){
+    const a=(k/20)*Math.PI*2;
+    pts.push(Math.cos(a)*.18, .2+(k%3)*.15, Math.sin(a)*.18);
+    joint.push(0,1,0,0);weight.push(.85,.15,0,0);
+  }
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+  g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(joint,4));
+  g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weight,4));
+  const mesh=new THREE.SkinnedMesh(g,new THREE.MeshBasicMaterial());
+  const bindMatrix=new THREE.Matrix4().makeTranslation(10,0,0);
+  const inverse0=new THREE.Matrix4().makeTranslation(-10,0,0);
+  const inverse1=new THREE.Matrix4().makeTranslation(-10,-1,0);
+  mesh.bind(new THREE.Skeleton([bone0,bone1],[inverse0,inverse1]),bindMatrix);
+  mesh.position.set(150,12,3);
+  mesh.updateMatrixWorld(true);
+  let caps=getBindCapsules(mesh,1);
+  assert.ok(caps.length===2);
+  assert.ok(Math.abs(caps[0].start.x)<1e-5,'bone bind point must be in geometry local space');
+  assert.ok(Math.abs(caps[0].end.y-1)<1e-5,'child bind point should be one unit along Y');
+  assert.equal(caps[0].radiusSource,'weighted-vertices');
+  const first=caps[0].radius;
+  assert.ok(first>.03 && first<.45,'capsule should fit actual weighted surface, not whole-character radius');
+  mesh.position.set(-900,0,0);
+  mesh.updateMatrixWorld(true);
+  caps=getBindCapsules(mesh,1);
+  assert.ok(Math.abs(caps[0].radius-first)<1e-9);
+  assert.ok(Math.abs(caps[0].start.x)<1e-5,'animation/world movement must not shift bind capsule');
+  g.dispose();mesh.material.dispose();
+});
+
+test('wrong-limb garment vertex is reassigned only after explicit opt-in',()=>{
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute([1,.5,0],3));
+  g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute([0,0,0,0],4));
+  g.setAttribute('skinWeight',new THREE.Float32BufferAttribute([1,0,0,0],4));
+  const c=[
+    {index:0,start:new THREE.Vector3(0,0,0),end:new THREE.Vector3(0,1,0),radius:.2},
+    {index:1,start:new THREE.Vector3(1,0,0),end:new THREE.Vector3(1,1,0),radius:.2}
+  ];
+  const conservative=guardSkinToCapsules(g,c,{allowReassign:false});
+  assert.equal(conservative.geometry.getAttribute('skinIndex').getX(0),0);
+  assert.equal(conservative.reassigned,0);
+  assert.equal(conservative.unresolved,1);
+  const repair=guardSkinToCapsules(g,c,{allowReassign:true});
+  assert.equal(repair.geometry.getAttribute('skinIndex').getX(0),1);
+  assert.equal(repair.geometry.getAttribute('skinWeight').getX(0),1);
+  assert.equal(repair.reassigned,1);
+  assert.equal(g.getAttribute('skinIndex').getX(0),0,'source untouched until apply');
+  conservative.geometry.dispose();repair.geometry.dispose();g.dispose();
+});
+
+test('no plausible capsule does not silently bind cloth to arbitrary bone',()=>{
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute([50,50,50],3));
+  g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute([0,0,0,0],4));
+  g.setAttribute('skinWeight',new THREE.Float32BufferAttribute([1,0,0,0],4));
+  const c=[{index:0,start:new THREE.Vector3(0,0,0),end:new THREE.Vector3(0,1,0),radius:.2}];
+  const output=guardSkinToCapsules(g,c,{allowReassign:true});
+  assert.equal(output.unresolved,1);
+  assert.equal(output.reassigned,0);
+  assert.equal(output.geometry.getAttribute('skinIndex').getX(0),0);
+  output.geometry.dispose();g.dispose();
 });
