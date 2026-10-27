@@ -78,3 +78,27 @@ If switching modules produces frame desynchronization **within playback** (rathe
 ## App identity
 
 The installed launcher reads **Phoenix Character Forge** (PCF). Within the app the three modules remain **Rig & Animation** (based on the user's exact v7.6 Chest Guard APK), **Retarget**, and **Character**. The title shown in the staged Rig HTML and the Character HTML is also **Phoenix Character Forge**, while the underlying working models and Rig 7.6 controls are kept unchanged. The Android application ID remains the existing integration package suffix `.suite` for compatibility with stored GLB files.
+
+
+## NEW: Geometry Optimization and Bone Volume inspector (prototype)
+
+Added as a fourth **Optimize / Оптимизация** tab in the same Phoenix Character Forge Android integration. It is a separate local **Three.js + Vite** editor bundled at \`app/src/main/assets/studio/optimize\`, opened by native WebView and connected to the existing shared GLB workspace.
+
+**Functions implemented:**
+- GLB import through Android picker or active GLB workspace; visual model orbit/zoom.
+- Mesh picker with live per-mesh and total vertex/triangle counts, skin/bone counts and number of animations.
+- Presets 5,000 / 10,000 / 20,000 / 40,000 / custom triangles.
+- Conservative **vertex clustering simplifier**; UV protection, hard-normal and bone influence signatures; rebuilds skin joints and weights for up to 4 nonzero influences and normalizes to 1. Skips morph-target meshes and meshes with multiple material groups or unsupported vertex attributes. The target is *best effort*, **not** the same proprietary Tripo remeshing algorithm and not guaranteed to produce production-quality edge loops.
+- Transparent/wireframe **bone capsules** drawn from inverse bind matrices around bone segments. Adjustable global radius. Mesh choice supports body/garment inspection separately; a selected bone's influential vertices may be highlighted in the bind pose.
+- Optional user-approved **capsule-aware skin attenuation**; original weights farther from each capsule are smoothly reduced and renormalized. It does not create a new perfect autore rig, cannot repair every wrongly weighted garment and is OFF by default. Good existing Meshy weights should not be automatically replaced.
+- True before/after **3D preview, Apply, Cancel preview, Restore original**, then GLB export under a NEW filename, including rigging, materials and any GLB animation clips that can be serialized.
+- Node tests prove no direct mutation of the source geometry, preservation of normalized 4-weight skinning in the sample, morph-safety rejection, and guarded capsule-weight edits.
+
+**Limitations and quality gates:**
+- *Decimation* (clustering) is not true human-aware retopology; some models may not reach 20k with seam protection. Original model is preserved, user must preview and explicitly apply. Always verify clothes, UV and skeleton on the target device before game export.
+- Capsules are an **editable weight-influence visual guide**, **not proof that Tripo internally uses this algorithm**; bone influences naturally overlap at joints and require blends rather than a hard cutoff.
+- Initial UI processes a selected mesh at a time, not all character meshes atomically, and protects facial blendshape geometry by skipping its topology changes.
+- Heavy GLBs on an Android 4GB tablet should be tested carefully; runtime performance and true synchronization between editors cannot be guaranteed from passing CI tests.
+- The native build is tested by CI with **placeholder Rig and Character assets**; the real unified APK requires the exact externally available v7.6 Chest Guard APK.
+
+Source under \`integration/optimizer/\`, tests in \`integration/optimizer/mesh-tools.test.js\`; workflows build the optimizer and verify the native integration. Original repositories and your working Rig v7.6 APK remain untouched.
