@@ -57,6 +57,28 @@ def patch_html(path: Path, script: str = "studio-shell.js") -> None:
         path.write_text(html, encoding="utf-8")
 
 
+
+def patch_branding(path: Path, editor: str) -> None:
+    """Replace staged page brand only, keeping Rig v7.6 editor functionality."""
+    import re
+    html = path.read_text(encoding="utf-8")
+    updated, count = re.subn(r"<title[^>]*>.*?</title>",
+        "<title>Phoenix Character Forge — " +
+        ("Rig 7.6" if editor == "rig" else "Character") + "</title>",
+        html, count=1, flags=re.IGNORECASE | re.DOTALL)
+    if count != 1:
+        raise RuntimeError(f"Cannot set page title: {path}")
+    if editor == "rig":
+        # Keep the original chest guard label/version beneath the brand.
+        updated = updated.replace("<strong>Rig Animation Studio</strong>",
+            "<strong>Phoenix Character Forge</strong>", 1)
+        updated = updated.replace('aria-label="Rig Animation Studio"',
+            'aria-label="Phoenix Character Forge"', 1)
+        if "v7.6" in html.lower() and "chest-guard-panel" not in html:
+            raise RuntimeError("Supplied Rig v7.6 web build lacks its chest guard panel")
+    path.write_text(updated, encoding="utf-8")
+
+
 def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_root: Path) -> None:
     app = project / "app"
     manifest_file = app / "src/main/AndroidManifest.xml"
@@ -74,7 +96,7 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     application = root.find("application")
     assert application is not None
     # Distinct Android icon/label: never silently overwrite an installed Anim Retarget.
-    application.set(LABEL, "Phoenix Character Suite")
+    application.set(LABEL, "Phoenix Character Forge")
     if retarget == "com.animretarget.app.StudioWebActivity":
         raise RuntimeError("Refusing to integrate twice")
     if any(a.get(NAME) == "com.animretarget.app.StudioWebActivity"
@@ -84,7 +106,7 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     entry = ET.SubElement(application, "activity", {
         NAME: "com.animretarget.app.StudioWebActivity",
         EXPORTED: "true",
-        LABEL: "Phoenix Character Suite",
+        LABEL: "Phoenix Character Forge",
         "{" + NS + "}configChanges": "orientation|screenSize|keyboardHidden",
     })
     intent = ET.SubElement(entry, "intent-filter")
@@ -93,6 +115,8 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     manifest_file.parent.mkdir(parents=True, exist_ok=True)
     tree.write(manifest_file, encoding="utf-8", xml_declaration=True)
 
+    # Stage the original binary-built editors, then BRAND ONLY THE COPIES.
+    # No original source file, rig weights, animations or chest-guard logic is changed.
     # Copy actual builds; browser is never pointed to live GitHub or web servers.
     dest = app / "src/main/assets/studio"
     for name, source, entrypoint in (
@@ -104,6 +128,7 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
             shutil.rmtree(target)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, target)
+        patch_branding(target / entrypoint, name)
         patch_html(target / entrypoint, "studio-shell.js")
         patch_html(target / entrypoint, "studio-sync.js")
         shutil.copyfile(integration_root / "web/studio-shell.js",
@@ -141,7 +166,7 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     ):
         if not required.is_file() or required.stat().st_size < 50:
             raise RuntimeError(f"Integration output missing: {required}")
-    print("Rig-first Android suite packed. Native Retarget: " + retarget)
+    print("Phoenix Character Forge staged. Native Retarget: " + retarget)
     print("Source copies unchanged. GLB workspace: app-private files/phoenix_workspace.")
 
 
