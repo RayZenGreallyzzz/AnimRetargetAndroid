@@ -13,3 +13,5 @@ Rebuild: separate install ID .suitecaps, no overwrite of prior .suite data; test
 Build Woman profile: Human → Woman → Humanoid; breast/tail/wings/ears switchable, 16 skinned GLB combinations, 2026-10-27.
 
 2026-10-28: anatomy anchored Character Studio and skin mask tests; compile with fix/anatomical-anchors-and-skinning.
+
+Retry: corrected landmark scale when skinned geometry absent (head, ears, hair).
