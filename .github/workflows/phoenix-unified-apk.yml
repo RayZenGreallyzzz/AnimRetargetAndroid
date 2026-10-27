@@ -103,6 +103,11 @@ jobs:
           test -s AnimRetargetAndroid/app/src/main/assets/studio/optimize/index.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
+          python3 integration/woman_rig_patch.py AnimRetargetAndroid/app/src/main/assets/studio/rig
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/rigs/rig-woman-1000.glb
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/phoenix-woman-ui.js
+          grep -q 'phoenix-woman-bone-options' AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
+          python3 integration/woman_profile_verify.py AnimRetargetAndroid/app/src/main/assets/studio/rig
 
       - name: Isolate experimental capsule build from previous saved Android workspace
         shell: bash
