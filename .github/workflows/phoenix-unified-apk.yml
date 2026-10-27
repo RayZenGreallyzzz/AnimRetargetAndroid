@@ -53,6 +53,14 @@ jobs:
           npm run build -- --base=./
           test -s dist/index.html
 
+      - name: Test and build offline Geometry Optimizer
+        working-directory: integration/optimizer
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+          test -s dist/index.html
+
       - name: Test unified tabs and manifest injector
         run: |
           node --check integration/web/studio-shell.js
@@ -74,7 +82,8 @@ jobs:
       - name: Use original Rig menu as unified default tab
         run: |
           python3 -m py_compile integration/inject_shell.py
-          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist
+          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist integration/optimizer/dist
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/optimize/index.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
 
