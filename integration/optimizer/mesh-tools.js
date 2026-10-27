@@ -140,54 +140,156 @@ export function closestSegmentDistanceSq(p,a,b){
   const t=clamp(p.clone().sub(a).dot(ab)/d,0,1);
   return p.distanceToSquared(a.clone().addScaledVector(ab,t));
 }
-export function getBindCapsules(mesh,radiusScale=1){
-  if(!mesh.isSkinnedMesh||!mesh.skeleton)return [];
-  const bones=mesh.skeleton.bones,inverses=mesh.skeleton.boneInverses;
-  const local=mesh.matrixWorld.clone().invert();
-  const points=bones.map((_,i)=>new THREE.Vector3().setFromMatrixPosition(local.clone().multiply(inverses[i].clone().invert())));
-  mesh.geometry.computeBoundingBox();
-  const diag=mesh.geometry.boundingBox.getSize(new THREE.Vector3()).length();
-  const base=Math.max(diag*.025,.0001);
-  return bones.map((bone,i)=>{
-    const child=bones.findIndex(b=>b.parent===bone);
-    let a=points[i],b=child>=0?points[child]:points[i].clone();
-    if(child<0&&bone.parent){
-      const parent=bones.indexOf(bone.parent);
-      if(parent>=0){a=points[parent];b=points[i];}
-    }
-    const length=a.distanceTo(b),radius=Math.max(base*.35,Math.min(base*2.6,length*.24))*radiusScale;
-    return {name:bone.name||('Bone '+i),index:i,start:a,end:b,radius,length};
-  });
-}
-/** Attenuate original weights outside a bone capsule, never force hard zero seams.
- * Apply only to the selected mesh and only on explicit user approval.
+/**
+ * Capsules in GEOMETRY bind space; stable even while the model is animated.
+ * Their radii are inferred from nearby vertices with *strong* skin influence,
+ * rather than using one global body-size radius for all parts.
+ * Robust quantiles reject stray weights across the torso/opposite limb.
  */
-export function guardSkinToCapsules(g,capsules,{softness=1.5}={}){
-  const pos=g.getAttribute('position'),joint=g.getAttribute('skinIndex'),weight=g.getAttribute('skinWeight');
+export function getBindCapsules(mesh,radiusScale=1){
+  if(!mesh?.isSkinnedMesh || !mesh.skeleton)return [];
+  const geo=mesh.geometry,position=geo.getAttribute('position'),
+        joint=geo.getAttribute('skinIndex'),weight=geo.getAttribute('skinWeight');
+  if(!position || !mesh.skeleton.boneInverses?.length)return [];
+  const bones=mesh.skeleton.bones,inv=mesh.skeleton.boneInverses;
+  // bindMatrix is fixed in the REST pose; matrixWorld would move with animation.
+  const unbind=mesh.bindMatrix.clone().invert();
+  const points=bones.map((_,i)=>{
+    const rest=unbind.clone().multiply(inv[i].clone().invert());
+    return new THREE.Vector3().setFromMatrixPosition(rest);
+  });
+  geo.computeBoundingBox();
+  const diag=Math.max(geo.boundingBox.getSize(new THREE.Vector3()).length(),1e-4);
+  const influenceCount=new Uint32Array(bones.length);
+  if(joint&&weight){
+    for(let i=0;i<position.count;i++)for(let k=0;k<4;k++){
+      const id=joint.getComponent(i,k);
+      if(id>=0&&id<bones.length&&weight.getComponent(i,k)>.15)influenceCount[id]++;
+    }
+  }
+  const capsules=bones.map((bone,i)=>{
+    const childIndices=[];
+    for(let k=0;k<bones.length;k++)if(bones[k].parent===bone)childIndices.push(k);
+    // Prefer a useful weighted descendant over an unweighted end helper.
+    childIndices.sort((a,b)=>influenceCount[b]-influenceCount[a]);
+    const child=childIndices[0];
+    let start=points[i],end=child!==undefined?points[child]:points[i].clone();
+    if(child===undefined && bone.parent){
+      const parent=bones.indexOf(bone.parent);
+      if(parent>=0){start=points[parent];end=points[i];}
+    }
+    const length=start.distanceTo(end);
+    const floor=Math.max(.003*diag,1e-5);
+    const ceiling=Math.max(floor,Math.min(.16*diag,Math.max(.018*diag,length*.8)));
+    const fallback=Math.max(floor,Math.min(ceiling,length*.23||.018*diag));
+    return {name:bone.name||('Bone '+i),index:i,start,end,length,
+      radius:fallback,radiusSource:'fallback',sampleCount:0,
+      _floor:floor,_ceiling:ceiling,_samples:[]};
+  });
+  if(joint&&weight){
+    // A tiny subset of vertices is sufficient for visually fitting each bone.
+    // On mobile this costs O(vertices * 4), with no triangles/BVH rebuild.
+    for(let i=0;i<position.count;i++){
+      const x=position.getX(i),y=position.getY(i),z=position.getZ(i);
+      for(let k=0;k<4;k++){
+        const w=weight.getComponent(i,k);
+        if(w<.35)continue;
+        const b=joint.getComponent(i,k),cap=capsules[b];
+        if(cap)cap._samples.push(Math.sqrt(pointSegmentDistanceSqXYZ(x,y,z,cap.start,cap.end)));
+      }
+    }
+  }
+  for(const cap of capsules){
+    cap.sampleCount=cap._samples.length;
+    if(cap.sampleCount>=6){
+      cap._samples.sort((a,b)=>a-b);
+      const idx=Math.floor((cap.sampleCount-1)*.82);
+      const q=cap._samples[idx];
+      cap.radius=Math.max(cap._floor,Math.min(cap._ceiling,q*1.12));
+      cap.radiusSource='weighted-vertices';
+    }
+    cap.radius*=Math.max(.2,Math.min(4,radiusScale));
+    delete cap._samples;delete cap._floor;delete cap._ceiling;
+  }
+  return capsules;
+}
+// No temporary Vector3 allocations in the vertex-by-bone hot loop.
+function pointSegmentDistanceSqXYZ(x,y,z,a,b){
+  const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z;
+  const lenSq=dx*dx+dy*dy+dz*dz;
+  const t=lenSq<1e-12?0:clamp(((x-a.x)*dx+(y-a.y)*dy+(z-a.z)*dz)/lenSq,0,1);
+  const rx=x-(a.x+dx*t),ry=y-(a.y+dy*t),rz=z-(a.z+dz*t);
+  return rx*rx+ry*ry+rz*rz;
+}
+/**
+ * Preview-only influence diagnostics/correction.
+ * Existing dominant influence is NEVER silently replaced in default mode.
+ *
+ * allowReassign: opt-in for a visibly broken clothing mesh. If no original
+ * influences belong to nearby capsules, find the four nearest eligible
+ * capsules in bind space (not from the animation frame). Softness protects
+ * seams; no hard cutoff is applied to good existing weights.
+ */
+export function guardSkinToCapsules(geometry,capsules,{softness=1.5,allowReassign=false}={}){
+  const pos=geometry.getAttribute('position'),
+        joint=geometry.getAttribute('skinIndex'),
+        weight=geometry.getAttribute('skinWeight');
   if(!pos||!joint||!weight)return {reason:'Нужны skinIndex и skinWeight.'};
-  const out=g.clone(),jDst=out.getAttribute('skinIndex'),wDst=out.getAttribute('skinWeight');
-  const p=new THREE.Vector3();let changed=0;
+  if(joint.itemSize!==4||weight.itemSize!==4)
+    return {reason:'Для безопасной коррекции требуются четыре слота весов.'};
+  const out=geometry.clone(),destJ=out.getAttribute('skinIndex'),
+        destW=out.getAttribute('skinWeight');
+  let changed=0,reassigned=0,outOfCapsule=0,unresolved=0;
+  const safeSoftness=Math.max(.1,Math.min(5,softness));
   for(let i=0;i<pos.count;i++){
-    p.fromBufferAttribute(pos,i);
-    const entries=[];
+    const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+    const candidates=[],original=[],local=[];
+    let total=0;
     for(let slot=0;slot<4;slot++){
       const id=joint.getComponent(i,slot),w=weight.getComponent(i,slot);
       if(w<=0)continue;
+      total+=w;
+      original.push([id,w]);
       const c=capsules[id];
-      if(!c){entries.push([id,w]);continue;}
-      const d=Math.sqrt(closestSegmentDistanceSq(p,c.start,c.end));
-      const factor=d<=c.radius?1:Math.exp(-1.5*Math.pow((d-c.radius)/Math.max(c.radius*softness,.00001),2));
-      entries.push([id,w*Math.max(.00001,factor)]);
+      if(!c){candidates.push([id,w]);continue;}
+      const d=Math.sqrt(pointSegmentDistanceSqXYZ(x,y,z,c.start,c.end));
+      const ratio=d/Math.max(c.radius,1e-6);
+      if(ratio<=1.20)local.push(id);
+      const relative=Math.max(0,d-c.radius)/Math.max(c.radius*safeSoftness,1e-6);
+      const factor=ratio<=1?1:Math.exp(-1.5*relative*relative);
+      candidates.push([id,w*Math.max(1e-5,factor)]);
     }
-    const skin=normalizedTop4(entries,joint.getX(i));
+    if(total<=0){unresolved++;continue;}
+    const hasLocal=local.length>0;
+    if(!hasLocal)outOfCapsule++;
+    let used=candidates;
+    if(allowReassign&&!hasLocal){
+      // Preserve local clothing placement; do not copy humanoid weights
+      // by vertex index from a different topology.
+      const nearby=[];
+      for(const c of capsules){
+        if(!c||c.radius<=0)continue;
+        const d=Math.sqrt(pointSegmentDistanceSqXYZ(x,y,z,c.start,c.end));
+        const ratio=d/Math.max(c.radius,1e-6);
+        if(ratio<=1.20)nearby.push({id:c.index,ratio,
+          score:Math.exp(-2*ratio*ratio)});
+      }
+      nearby.sort((a,b)=>a.ratio-b.ratio);
+      if(nearby.length){
+        used=nearby.slice(0,4).map(n=>[n.id,n.score]);
+        reassigned++;
+      }else unresolved++;
+    }else if(!hasLocal)unresolved++;
+    const skin=normalizedTop4(used,joint.getX(i));
     let diff=false;
     for(let slot=0;slot<4;slot++){
-      if(Math.abs(weight.getComponent(i,slot)-skin.weights[slot])>1e-4||
-       joint.getComponent(i,slot)!==skin.joints[slot])diff=true;
-      jDst.setComponent(i,slot,skin.joints[slot]);wDst.setComponent(i,slot,skin.weights[slot]);
+      if(Math.abs(weight.getComponent(i,slot)-skin.weights[slot])>1e-4 ||
+        joint.getComponent(i,slot)!==skin.joints[slot])diff=true;
+      destJ.setComponent(i,slot,skin.joints[slot]);
+      destW.setComponent(i,slot,skin.weights[slot]);
     }
     if(diff)changed++;
   }
-  jDst.needsUpdate=true;wDst.needsUpdate=true;
-  return {geometry:out,changed};
+  destJ.needsUpdate=true;destW.needsUpdate=true;
+  return {geometry:out,changed,reassigned,outOfCapsule,unresolved};
 }
