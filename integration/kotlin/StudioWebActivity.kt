@@ -43,6 +43,7 @@ class StudioWebActivity : Activity() {
     fun currentTool(): String = selected
     private var uploadCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var exportingFile: File? = null
+    private var openRetargetAfterExport = false
     private lateinit var bridge: PhoenixWorkspaceBridge
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,11 +58,21 @@ class StudioWebActivity : Activity() {
 
     fun openTool(name: String) {
         if (name == "retarget") {
-            try {
-                // Exact former launcher activity is supplied by the integration script.
-                startActivity(Intent().setClassName(this, "__NATIVE_RETARGET_ACTIVITY__"))
-            } catch (e: Exception) {
-                Toast.makeText(this, "Ретаргетинг: " + e.message, Toast.LENGTH_LONG).show()
+            val current = bridge.latestActiveGlb()
+            if (current == null) {
+                launchNativeRetarget()
+            } else {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Передача GLB в Retarget")
+                    .setMessage("Общая модель: " + current.name +
+                        "\nRetarget использует отдельный импорт. Сохрани модель через Android, затем выбери её в Retarget.")
+                    .setPositiveButton("Сохранить и открыть") { _, _ ->
+                        openRetargetAfterExport = true
+                        exportFileToPicker(current)
+                    }
+                    .setNeutralButton("Открыть без передачи") { _, _ -> launchNativeRetarget() }
+                    .setNegativeButton("Отмена", null)
+                    .show()
             }
             return
         }
@@ -153,6 +164,20 @@ class StudioWebActivity : Activity() {
         return web
     }
 
+    private fun launchNativeRetarget(uri: Uri? = null) {
+        try {
+            val next = Intent().setClassName(this, "__NATIVE_RETARGET_ACTIVITY__")
+            if (uri != null) {
+                next.setDataAndType(uri, "model/gltf-binary")
+                next.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                next.putExtra("phoenix_shared_glb_uri", uri.toString())
+            }
+            startActivity(next)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ретаргетинг: " + e.message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     fun exportFileToPicker(file: File) {
         if (!file.isFile) return
         exportingFile = file
@@ -194,9 +219,16 @@ class StudioWebActivity : Activity() {
                             FileInputStream(src).use { input -> input.copyTo(output, 65536) }
                         } ?: error("Нет доступа к выбранному файлу")
                         Toast.makeText(this,"Сохранено: " + src.name,Toast.LENGTH_SHORT).show()
+                        if (openRetargetAfterExport) {
+                            openRetargetAfterExport = false
+                            launchNativeRetarget(data.data)
+                        }
                     } catch (e: Exception) {
+                        openRetargetAfterExport = false
                         Toast.makeText(this,"Ошибка экспорта: " + e.message,Toast.LENGTH_LONG).show()
                     }
+                } else {
+                    openRetargetAfterExport = false
                 }
             }
         }
@@ -385,6 +417,11 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
     // Load large GLB files by streaming them from the APK's local HTTPS origin
     // rather than moving the whole model across the JS bridge as Base64.
     fun resolveWorkspaceRead(name: String): File? = approved(name)
+
+    fun latestActiveGlb(): File? {
+        val name = metadata.getString("name", null) ?: return null
+        return if (name.lowercase().endsWith(".glb")) approved(name) else null
+    }
 
     @JavascriptInterface
     fun getWorkspaceUrl(name: String): String {
