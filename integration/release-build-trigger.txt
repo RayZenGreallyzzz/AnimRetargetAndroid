@@ -9,3 +9,5 @@ Attempt 2: request write-scope GitHub workflow token to access draft release.
 Rebuild 2026-10-27: BindPose-adaptive skinning capsules + opt-in clothing repair, regressions covered.
 
 Rebuild: separate install ID .suitecaps, no overwrite of prior .suite data; test-only signing.
+
+Build Woman profile: Human → Woman → Humanoid; breast/tail/wings/ears switchable, 16 skinned GLB combinations, 2026-10-27.
