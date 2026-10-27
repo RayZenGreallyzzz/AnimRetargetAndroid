@@ -14,9 +14,24 @@ ASSET = "Rig-Animation-Studio-v7.6-Chest-Guard-test.apk"
 ALLOWED_ASSETS = {ASSET, "Rig-Animation-Studio-v7.6-Chest-Guard-test.1.apk"}
 EXACT_SHA256 = "3e36c900a2746dd3cc4b2a71e8a295d6ec72dfcee892940910e3cc1c6fbc6243"
 EXACT_SIZE = 84054098
+RELEASE_NAME = "phoenix-rig-v7.6-input"
 
 def resolve(contents):
     data = json.loads(contents)
+    if isinstance(data, list):
+        matching = [
+            item for item in data
+            if item.get("name") == RELEASE_NAME
+            and (item.get("draft") is True
+                 or item.get("tag_name") == RELEASE_NAME)
+        ]
+        if len(matching) != 1:
+            raise ValueError(
+                f"Expected exactly one GitHub Release or private draft named {RELEASE_NAME}, found {len(matching)}"
+            )
+        data = matching[0]
+    if not isinstance(data, dict):
+        raise ValueError("Invalid release data structure")
     assets = data.get("assets")
     if not isinstance(assets, list):
         raise ValueError("Release JSON has no assets array. Create/publish the pinned Rig v7.6 release first.")
