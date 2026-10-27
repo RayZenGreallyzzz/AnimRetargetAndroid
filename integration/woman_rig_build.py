@@ -87,12 +87,49 @@ def new_woman(original,flags):
     for i in range(len(nodes)):
         global_at(i)
 
+    def p3(matrix):
+        return [float(matrix[12]),float(matrix[13]),float(matrix[14])]
+    def add(a,b):
+        return [x+y for x,y in zip(a,b)]
+    def sub(a,b):
+        return [x-y for x,y in zip(a,b)]
+    def scale(a,k):
+        return [v*k for v in a]
+    def dot(a,b):
+        return sum(x*y for x,y in zip(a,b))
+    def norm(a):
+        import math
+        length=math.sqrt(dot(a,a))
+        if length<1e-8:raise ValueError('Cannot calculate original bone orientation')
+        return [v/length for v in a]
+    def cross(a,b):
+        return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
+    def apply(matrix,p):
+        return [sum(matrix[col*4+row]*p[col] for col in range(3))+matrix[12+row] for row in range(3)]
+    def wp(name):
+        return p3(global_at(names[name]))
+    # Infer anatomical axes from the actual 66-bone rest skeleton, NOT its
+    # local rotations. The base Human source is an FBX-converted Z-up rig:
+    # hand-written "x,y,z" local translations can point backwards or sideways.
+    hip,spine,head=wp('pelvis'),wp('spine_03'),wp('head')
+    upperleft,upperright=wp('upperarm_l'),wp('upperarm_r')
+    up=norm(sub(head,hip))
+    left=norm(sub(upperleft,upperright))
+    right=scale(left,-1)
+    front=norm(cross(right,up))
+    def target(base,side=0,left_dist=0,up_dist=0,front_dist=0):
+        out=add(base,scale(left,side*left_dist))
+        out=add(out,scale(up,up_dist))
+        return add(out,scale(front,front_dist))
     def chain(parent_name,items):
         parent=names[parent_name]
-        for name,translate in items:
+        for name,world_position in items:
             if name in names:raise ValueError('Duplicate Woman bone '+name)
+            # Compute the local translation from the current parent's full
+            # inverse world matrix. This survives rotations in the FBX rig.
+            local_pos=apply(inverse(global_at(parent)),world_position)
             i=len(nodes)
-            nodes.append({'name':name,'translation':list(translate)})
+            nodes.append({'name':name,'translation':local_pos})
             nodes[parent].setdefault('children',[]).append(i)
             parents[i]=parent
             names[name]=i
@@ -104,32 +141,30 @@ def new_woman(original,flags):
     added_bind_matrices=[]
     if flags[0]=='1':
         for side,sign in [('l',1),('r',-1)]:
-            chain('spine_03',[
-                ('breast_'+side,(sign*.135,.032,.102)),
-                ('breast_tip_'+side,(sign*.018,-.010,.078))
-            ])
+            p=target(spine,sign,.135,.043,.11)
+            q=target(p,sign,.012,-.011,.065)
+            chain('spine_03',[('breast_'+side,p),('breast_tip_'+side,q)])
     if flags[1]=='1':
-        chain('pelvis',[
-            ('tail_01',(0,-.065,-.115)),
-            ('tail_02',(0,-.083,-.155)),
-            ('tail_03',(0,-.064,-.142)),
-            ('tail_tip',(0,-.046,-.106))
-        ])
+        p=target(hip,0,0,-.045,-.115)
+        q=target(p,0,0,-.05,-.14)
+        r=target(q,0,0,-.055,-.145)
+        t=target(r,0,0,-.045,-.12)
+        chain('pelvis',[('tail_01',p),('tail_02',q),('tail_03',r),('tail_tip',t)])
     if flags[2]=='1':
         for side,sign in [('l',1),('r',-1)]:
+            p=target(spine,sign,.19,.095,-.09)
+            q=target(p,sign,.17,.095,-.09)
+            r=target(q,sign,.18,.015,-.075)
+            t=target(r,sign,.14,-.11,-.08)
             chain('spine_03',[
-                ('wing_01_'+side,(sign*.155,.095,-.095)),
-                ('wing_02_'+side,(sign*.16,.110,-.065)),
-                ('wing_03_'+side,(sign*.165,.018,-.055)),
-                ('wing_tip_'+side,(sign*.145,-.110,-.08))
-            ])
+                ('wing_01_'+side,p),('wing_02_'+side,q),
+                ('wing_03_'+side,r),('wing_tip_'+side,t)])
     if flags[3]=='1':
         for side,sign in [('l',1),('r',-1)]:
-            chain('head',[
-                ('ear_01_'+side,(sign*.085,.102,.012)),
-                ('ear_02_'+side,(sign*.026,.080,.005)),
-                ('ear_tip_'+side,(sign*.005,.050,.005))
-            ])
+            p=target(head,sign,.085,.103,0)
+            q=target(p,sign,.028,.08,0)
+            t=target(q,sign,.008,.05,0)
+            chain('head',[('ear_01_'+side,p),('ear_02_'+side,q),('ear_tip_'+side,t)])
     if not added_bind_matrices: return original
     binary=bytearray(source)
     while len(binary)%4:binary.append(0)
