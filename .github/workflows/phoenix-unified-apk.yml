@@ -2,10 +2,6 @@ name: Phoenix Character Forge - exact Rig Studio 7.6 APK
 on:
   workflow_dispatch:
     inputs:
-      rig_apk_url:
-        description: 'HTTPS link to exact Rig-Animation-Studio-v7.6-Chest-Guard-test.apk (public release asset)'
-        required: true
-        type: string
       character_ref:
         description: 'Character Studio source ref'
         required: true
@@ -30,14 +26,26 @@ jobs:
           git clone --depth 1 --branch "$CHARACTER_REF" https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/phoenix-character
           echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
 
-      - name: Download and verify user-supplied Rig Studio 7.6
+      - name: Download pinned Rig Studio v7.6 APK from repository Releases
         env:
-          RIG_APK_URL: ${{ inputs.rig_apk_url }}
+          GH_TOKEN: ${{ github.token }}
+          RIG_RELEASE_TAG: phoenix-rig-v7.6-input
         shell: bash
         run: |
-          test -n "$RIG_APK_URL" || { echo "::error::Exact v7.6 APK URL required; no fallback to old Rig"; exit 1; }
-          case "$RIG_APK_URL" in https://*) ;; *) echo "::error::Only HTTPS download links are allowed"; exit 1;; esac
-          curl --fail --show-error --silent --location --retry 3 --max-time 300 "$RIG_APK_URL" -o /tmp/rig-studio-v76.apk
+          set -euo pipefail
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          curl --fail --show-error --silent --location --retry 3 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$API/releases/tags/$RIG_RELEASE_TAG" -o /tmp/phoenix-release.json
+          ASSET_ID="$(python3 integration/find_rig_release_asset.py /tmp/phoenix-release.json)"
+          curl --fail --show-error --silent --location --retry 3 --max-time 600 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/octet-stream" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API/releases/assets/$ASSET_ID" -o /tmp/rig-studio-v76.apk
+          echo "rig_release_tag=$RIG_RELEASE_TAG" >> /tmp/phoenix-source-revisions.txt
+          echo "rig_asset_id=$ASSET_ID" >> /tmp/phoenix-source-revisions.txt
           echo "rig_apk_sha256=$(sha256sum /tmp/rig-studio-v76.apk | cut -d' ' -f1)" >> /tmp/phoenix-source-revisions.txt
           python3 integration/extract_rig_v76.py /tmp/rig-studio-v76.apk /tmp/phoenix-rig/dist
 
