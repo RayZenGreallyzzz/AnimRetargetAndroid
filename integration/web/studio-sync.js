@@ -8,7 +8,7 @@
   const bridge = window.PhoenixNative;
   if (!bridge || !suite) return;
   const tool = suite.tool;
-  const modelInput = tool === "character" ? "base-file" : "model-upload";
+  const modelInput = tool === "character" ? "base-file" : (tool === "optimize" ? "opt-model-file" : "model-upload");
   const MAX_MB = 140;
   const MAX_SIZE = MAX_MB * 1024 * 1024;
   let lastRevision = -1;
