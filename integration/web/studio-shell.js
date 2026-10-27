@@ -155,6 +155,7 @@
       const saved=call("finishSave",token);
       if(!saved)throw Error("Невозможно завершить сохранение");
       toast("Сохранено: "+filename+" (вкладка «Общие GLB»)");
+      window.dispatchEvent(new Event("phoenix:workspace-updated"));
       return true;
     }catch(e){call("cancelSave",token);throw e;}
   }
@@ -167,4 +168,7 @@
     event.preventDefault();event.stopImmediatePropagation();
     persistBlob(url,filename).catch(e=>toast("Ошибка сохранения: "+e.message));
   },true);
+  // The separate synchronization layer uses the same safe chunked file loader.
+  // It must not replace or mutate the original Rig or Character editor engines.
+  window.PhoenixSuite = Object.freeze({useWorkspaceFile, toast, tool});
 })();
