@@ -26,6 +26,13 @@ jobs:
         run: |
           node --check integration/web/studio-shell.js
           node --check integration/web/studio-sync.js
+      - name: Test and compile Geometry Optimizer
+        working-directory: integration/optimizer
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+          test -s dist/index.html
       - name: Run offline integration tests
         run: python3 -m unittest discover -s integration/tests -v
       - name: Verify Rust-free native bridge interface contract
@@ -57,7 +64,7 @@ jobs:
           mkdir -p /tmp/rig-build /tmp/character-build
           printf '<html><head><title>Rig Animation Studio</title></head><body>Rig CI placeholder</body></html>' > /tmp/rig-build/create.html
           printf '<html><head><title>Character Studio</title></head><body>Character CI placeholder</body></html>' > /tmp/character-build/index.html
-          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/rig-build /tmp/character-build
+          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/rig-build /tmp/character-build integration/optimizer/dist
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
