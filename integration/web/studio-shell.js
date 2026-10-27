@@ -95,14 +95,30 @@
     if(!target || !(target instanceof HTMLInputElement))throw Error("Поле импорта не найдено");
     const size = Number(call("getFileSize",name));
     if(!Number.isFinite(size) || size<0 || size>140*1024*1024)throw Error("Файл слишком большой для импорта на этом устройстве (макс. 140 МБ)");
-    const blocks=[];
-    for(let offset=0;offset<size;offset+=65536){
-      const b64=call("readFileChunk",name,offset,65536);
-      if(!b64)throw Error("Не удалось прочитать блок "+offset);
-      blocks.push(base64ToBytes(b64));
-      if(offset%(1024*1024)<65536)await new Promise(resolve=>requestAnimationFrame(resolve));
+    const mime=name.toLowerCase().endsWith(".glb")?"model/gltf-binary":"application/octet-stream";
+    let file=null;
+    // Fast path: stream through Android's private HTTPS-origin workspace handler.
+    const fileUrl=call("getWorkspaceUrl",name);
+    if(fileUrl && fileUrl.startsWith("https://appassets.androidplatform.net/workspace/")){
+      try{
+        const response=await fetch(fileUrl,{cache:"no-store"});
+        if(!response.ok)throw Error("HTTP "+response.status);
+        const blob=await response.blob();
+        if(blob.size!==size)throw Error("File size mismatch");
+        file=new File([blob],name,{type:mime});
+      }catch(error){console.warn("Phoenix stream fallback:",error);}
     }
-    const file=new File(blocks,name,{type:name.endsWith(".glb")?"model/gltf-binary":"application/octet-stream"});
+    if(!file){
+      // Backward-compatible fallback for devices without streamed file support.
+      const blocks=[];
+      for(let offset=0;offset<size;offset+=65536){
+        const b64=call("readFileChunk",name,offset,65536);
+        if(!b64)throw Error("Не удалось прочитать блок "+offset);
+        blocks.push(base64ToBytes(b64));
+        if(offset%(1024*1024)<65536)await new Promise(resolve=>requestAnimationFrame(resolve));
+      }
+      file=new File(blocks,name,{type:mime});
+    }
     const transfer=new DataTransfer();
     transfer.items.add(file);
     target.files=transfer.files;
