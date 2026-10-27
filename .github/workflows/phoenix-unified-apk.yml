@@ -12,7 +12,7 @@ on:
       character_ref:
         description: 'Character Studio source ref'
         required: true
-        default: 'main'
+        default: 'fix/anatomical-anchors-and-skinning'
         type: string
 
 # GitHub's Draft Releases are hidden from ordinary read-only workflow identities.
@@ -30,7 +30,7 @@ jobs:
 
       - name: Fetch Character Studio copy (original stays untouched)
         env:
-          CHARACTER_REF: ${{ inputs.character_ref || 'main' }}
+          CHARACTER_REF: ${{ inputs.character_ref || 'fix/anatomical-anchors-and-skinning' }}
         run: |
           git clone --depth 1 --branch "$CHARACTER_REF" https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/phoenix-character
           echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
