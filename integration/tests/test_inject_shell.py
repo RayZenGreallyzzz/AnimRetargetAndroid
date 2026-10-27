@@ -27,10 +27,15 @@ class MergeSmokeTests(unittest.TestCase):
             gradle.write_text('plugins { id("com.android.application") }\n',encoding="utf-8")
             rig=base/"rig"; character=base/"character"
             rig.mkdir();character.mkdir()
-            (rig/"create.html").write_text("<html><head></head><body>Rig Studio</body></html>")
+            (rig/"create.html").write_text('<html><head><title>Rig Animation Studio</title></head>'
+                '<body><div id="ras-branding" aria-label="Rig Animation Studio">'
+                '<span class="ras-brand-copy"><strong>Rig Animation Studio</strong>'
+                '<small>v7.6 TEST · Защита груди</small></span></div>'
+                '<section id="chest-guard-panel">Chest guard controls</section>'
+                '</body></html>', encoding="utf-8")
             (rig/"assets").mkdir()
             (rig/"assets/game.js").write_text("const rig = true;")
-            (character/"index.html").write_text("<html><head></head><body>Character Studio</body></html>")
+            (character/"index.html").write_text("<html><head><title>Character Studio</title></head><body>Character Studio</body></html>")
             original=(rig/"create.html").read_bytes()
             integrate(native,rig,character,Path(__file__).resolve().parents[1])
             root=ET.parse(manifest).getroot()
@@ -46,6 +51,13 @@ class MergeSmokeTests(unittest.TestCase):
             self.assertIn("studio-shell.js",(assets/"character/index.html").read_text())
             self.assertIn("studio-sync.js",(assets/"rig/create.html").read_text())
             self.assertIn("studio-sync.js",(assets/"character/index.html").read_text())
+            self.assertIn("<title>Phoenix Character Forge — Rig 7.6</title>",
+                          (assets/"rig/create.html").read_text())
+            self.assertIn("<strong>Phoenix Character Forge</strong>",
+                          (assets/"rig/create.html").read_text())
+            self.assertIn("chest-guard-panel",(assets/"rig/create.html").read_text())
+            self.assertIn("<title>Phoenix Character Forge — Character</title>",
+                          (assets/"character/index.html").read_text())
             self.assertTrue((assets/"rig/studio-sync.js").stat().st_size > 100)
             self.assertTrue((assets/"character/studio-sync.js").stat().st_size > 100)
             self.assertEqual((assets/"rig/assets/game.js").read_text(),"const rig = true;")
@@ -57,7 +69,8 @@ class MergeSmokeTests(unittest.TestCase):
             self.assertIn("phoenix:activated",output.read_text())
             self.assertEqual((rig/"create.html").read_bytes(),original)
             self.assertIn('applicationIdSuffix = ".suite"', gradle.read_text())
-            self.assertEqual(app.get("{"+NS+"}label"),"Phoenix Character Suite")
+            self.assertEqual(app.get("{"+NS+"}label"),"Phoenix Character Forge")
+            self.assertEqual(current.get("{"+NS+"}label"),"Phoenix Character Forge")
 
 if __name__=="__main__":
     unittest.main()
