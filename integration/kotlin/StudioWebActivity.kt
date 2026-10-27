@@ -39,7 +39,8 @@ class StudioWebActivity : Activity() {
     private val allowedDomain = "appassets.androidplatform.net"
     private lateinit var container: FrameLayout
     private val views = mutableMapOf<String, WebView>()
-    private var selected = "rig"
+    @Volatile private var selected = "rig"
+    fun currentTool(): String = selected
     private var uploadCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var exportingFile: File? = null
     private lateinit var bridge: PhoenixWorkspaceBridge
@@ -79,6 +80,8 @@ class StudioWebActivity : Activity() {
         web.visibility = android.view.View.VISIBLE
         web.bringToFront()
         web.onResume()
+        // Notify an already-loaded editor that another module has published a newer GLB.
+        web.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
     }
 
     private fun createEditor(name: String): WebView {
@@ -197,6 +200,7 @@ class StudioWebActivity : Activity() {
     override fun onResume() {
         super.onResume()
         views[selected]?.onResume()
+        views[selected]?.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
     }
     override fun onBackPressed() {
         if(selected == "character") {
@@ -227,6 +231,7 @@ class StudioWebActivity : Activity() {
  */
 private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
     private val directory = File(app.filesDir, "phoenix_workspace").apply { mkdirs() }
+    private val metadata = app.getSharedPreferences("phoenix_suite_workspace_v2", Activity.MODE_PRIVATE)
     private val pendingDir = File(app.cacheDir, "phoenix_workspace_pending").apply { mkdirs() }
     private val filePattern = Regex("[^a-zA-Z0-9А-Яа-яЁё._ ()-]")
     private var pendingName: String? = null
@@ -298,6 +303,9 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
                 while(output.exists()) output = File(directory, basename + "_" + (counter++) + ext)
             }
             val success = pendingTemp!!.renameTo(output)
+            if (success && output.extension.equals("glb", ignoreCase = true)) {
+                markActive(output, app.currentTool())
+            }
             reset()
             success
         } catch (_: Exception) {reset(); false}
@@ -318,6 +326,42 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
         pendingTemp = null
         writtenBytes = 0L
         expectedBytes = 0L
+    }
+
+    /**
+     * Only a fully written GLB becomes the active project.
+     * The monotonically increasing revision enables cross-WebView change detection.
+     */
+    @Synchronized
+    private fun markActive(file: File, origin: String) {
+        val revision = metadata.getLong("revision", 0L) + 1L
+        metadata.edit()
+            .putString("name", file.name)
+            .putString("origin", origin)
+            .putLong("revision", revision)
+            .putLong("size", file.length())
+            .apply()
+    }
+
+    @JavascriptInterface @Synchronized
+    fun getActiveFileJson(): String {
+        val name = metadata.getString("name", null)
+        if (name.isNullOrBlank()) return "{}"
+        val file = approved(name) ?: return "{}"
+        return JSONObject()
+            .put("name", file.name)
+            .put("size", file.length())
+            .put("revision", metadata.getLong("revision", 0L))
+            .put("origin", metadata.getString("origin", "unknown"))
+            .toString()
+    }
+
+    @JavascriptInterface @Synchronized
+    fun setActiveFile(name: String, origin: String): Boolean {
+        if (!name.lowercase().endsWith(".glb")) return false
+        val file = approved(name) ?: return false
+        markActive(file, origin.take(40))
+        return true
     }
 
     @JavascriptInterface
