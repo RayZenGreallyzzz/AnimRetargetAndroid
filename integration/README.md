@@ -45,3 +45,31 @@ Workflow will **never silently fall back to the older Rig**. This is intentional
 Successful packaging **does not** prove full interoperability. Test all 3 tabs, import/export of real models, chest protection weights and animation, BVH / Mixamo retargeting, export and reimport of GLB, and memory consumption on a 4 GB tablet. Realtime shared skeleton and morph targets across tabs are **not** implemented yet.
 
 The locally produced first Rig 7.6 replacement APK uses a separate experimental application ID to avoid overwriting the earlier test suite. Android runtime tests are not yet available.
+
+
+## Synchronization update (27 Oct 2026)
+
+The early three-tab APK launched each editor, but they did not agree on a single working GLB. The integration branch now implements an **active GLB workspace record**, a monotonically increasing revision number and a source-editor marker. This record is shared by the Android host between the Rig and Character WebViews.
+
+- On first opening an editor it automatically imports the latest published GLB (up to 140 MiB).
+- Selecting a GLB file manually in Rig or Character copies that source to the shared app-private workspace.
+- After exporting a new GLB from an editor, the native bridge publishes that finished file as the new revision.
+- Switching back to an editor that already has a model loaded does **not silently replace unsaved edits**; it shows a new revision and a button to import with explicit confirmation.
+- Large GLB reads use a local WebViewAssetLoader HTTPS endpoint to avoid assembling megabytes of Base64 chunks. The old chunked method remains as a fallback.
+- For **native Retarget**, a dialog offers to save a copy of the active GLB using Android SAF before opening Retarget; the user must still select it in the Retarget import screen. This is **not** full automatic native import.
+- All editor state is still owned by each independent 3D engine. Bone positions, morph targets, keyframes and animation curves become shareable **only after the editor exports a new GLB**. Realtime common scene/rig editing is NOT implemented.
+
+### CI verification
+
+`.github/workflows/phoenix-sync-checks.yml` runs JavaScript syntax checks, Python integration smoke tests and builds the Kotlin/native bridge with minimal placeholder HTML assets. A successful **build-only** APK from that job should not be distributed as the real v7.6 combined app. The real user-supplied Rig v7.6 APK is required by the separate release build workflow and is checked against its SHA-256.
+
+### How to verify on the device
+
+1. Open Rig and load a small GLB.
+2. Export a new GLB after fitting its skeleton. Confirm active revision increments.
+3. Open Character: the latest GLB should import automatically; add an accessory and export another GLB.
+4. Switch back to Rig: the new revision should be announced; use **Загрузить новую версию** and confirm.
+5. Open Retarget: use **Сохранить и открыть**, pick a location using Android, then import the same GLB from that location in Retarget.
+6. Verify bones, weights, facial morphs and animations after each GLB export/import. Don't claim a full sync if any component is missing.
+
+If switching modules produces frame desynchronization **within playback** (rather than differing project files), that is a distinct timing/retargeting bug and requires a reproduction with an animation/model pair.
