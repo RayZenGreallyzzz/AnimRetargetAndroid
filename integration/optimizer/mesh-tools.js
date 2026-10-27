@@ -107,6 +107,10 @@ function cluster(g,cell,options={}){
   return {geometry:result,vertices:active.length,triangles:faces.length/3};
 }
 export function simplifyGeometry(g,target,options={}){
+  if(Object.values(g.morphAttributes||{}).some(a=>a?.length))
+    return {reason:'Содержит морфы лица: упрощение запрещено для сохранения мимики.'};
+  if(g.groups.length>1)
+    return {reason:'Несколько групп материалов: сетка сохранена без изменений.'};
   const pos=g.getAttribute('position');
   if(!pos)return {reason:'Нет атрибута POSITION.'};
   const oldCount=Math.floor((g.index?.count||pos.count)/3);
