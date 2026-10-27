@@ -5,3 +5,5 @@ Expected SHA256: 3e36c900a2746dd3cc4b2a71e8a295d6ec72dfcee892940910e3cc1c6fbc624
 Includes: Rig 7.6 Chest Guard, Character Studio, Anim Retarget and Optimize.
 
 Attempt 2: request write-scope GitHub workflow token to access draft release.
+
+Rebuild 2026-10-27: BindPose-adaptive skinning capsules + opt-in clothing repair, regressions covered.
