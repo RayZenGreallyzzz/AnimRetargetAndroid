@@ -1,0 +1,5 @@
+Phoenix Character Forge full test APK build
+Release draft input: phoenix-rig-v7.6-input
+Original APK asset: Rig-Animation-Studio-v7.6-Chest-Guard-test.1.apk
+Expected SHA256: 3e36c900a2746dd3cc4b2a71e8a295d6ec72dfcee892940910e3cc1c6fbc6243
+Includes: Rig 7.6 Chest Guard, Character Studio, Anim Retarget and Optimize.
