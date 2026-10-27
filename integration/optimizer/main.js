@@ -18,7 +18,9 @@ const ui=[
 '<label>Своя цель<input id="target" type="number" value="20000" min="64" max="260000" step="100"/></label>',
 '<label class="toggle"><input id="uv" type="checkbox" checked/> Защищать UV и текстуры</label>',
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
+'<label class="toggle"><input id="wireframe" type="checkbox"/> Показывать сетку поверх модели</label>',
 '<div class="buttons"><button id="simplify" class="primary">Предпросмотр удаления вершин</button><button id="undo">Отменить предпросмотр</button></div>',
+'<button id="compare" disabled>Сравнить: ДО / ПОСЛЕ</button>',
 '<p>Это осторожное объединение вершин, а не полная ретопология Tripo. Morph-меши и сложные материалы пропускаются. Целевой бюджет не гарантирован.</p>',
 '<h3>02 / Объёмы костей и одежда</h3>',
 '<label>Кость<select id="bones"></select></label>',
@@ -47,7 +49,7 @@ const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const exporter=new GLTFExporter();
 let character=null,animations=[],meshes=[],pending=null,playing=false,mixer=null;
 const originals=new Map(),capsuleGroup=new THREE.Group();
-let weightDots=null;
+let weightDots=null,wireOverlay=null;
 scene.add(capsuleGroup);
 const msg=s=>{$('status').textContent=s;};
 const fmt=n=>Number(n).toLocaleString('ru-RU');
@@ -60,7 +62,27 @@ function selectedStats(){
     (m?'\nВыбран: '+(m.name||'Mesh')+' · '+fmt(Math.floor((m.geometry.index?.count||m.geometry.getAttribute('position').count)/3))+
        ' треугольников · '+(m.isSkinnedMesh?m.skeleton.bones.length+' костей':'без скелета'):'');
 }
+function clearWire(){
+  if(wireOverlay){
+    wireOverlay.parent?.remove(wireOverlay);
+    wireOverlay.material.dispose();
+    wireOverlay=null;
+  }
+}
+function updateWire(){
+  clearWire();
+  const mesh=selected();
+  if(!$('wireframe').checked||!mesh)return;
+  mesh.updateMatrixWorld(true);
+  const material=new THREE.MeshBasicMaterial({color:0xffdf9f,wireframe:true,transparent:true,opacity:.35,depthTest:false,depthWrite:false});
+  wireOverlay=new THREE.Mesh(mesh.geometry,material);
+  wireOverlay.matrixAutoUpdate=false;
+  wireOverlay.matrix.copy(mesh.matrixWorld);
+  wireOverlay.renderOrder=15;
+  scene.add(wireOverlay);
+}
 function clearCapsules(){
+  clearWire();
   for(const m of [...capsuleGroup.children]){m.geometry.dispose();m.material.dispose();}
   capsuleGroup.clear();
   if(weightDots){weightDots.parent?.remove(weightDots);weightDots.geometry.dispose();weightDots.material.dispose();weightDots=null;}
@@ -68,6 +90,7 @@ function clearCapsules(){
 function updateCapsules(){
   clearCapsules();
   const mesh=selected();
+  updateWire();
   if(!mesh?.isSkinnedMesh)return;
   mesh.updateMatrixWorld(true);
   const bind=getBindCapsules(mesh,Number($('radius').value));
@@ -124,6 +147,7 @@ function cancelPending(){
   if(!pending)return;
   if(pending.mesh.geometry===pending.geometry)pending.mesh.geometry=pending.before;
   pending.geometry.dispose();pending=null;
+  $('compare').disabled=true;
   selectedStats();updateCapsules();
   msg('Предпросмотр отменён, сетка не изменена.');
 }
@@ -133,6 +157,7 @@ function apply(){
   if(!originals.has(mesh))originals.set(mesh,before);
   else if(before!==originals.get(mesh))before.dispose();
   mesh.geometry=geometry;pending=null;mesh.geometry.computeBoundingSphere();
+  $('compare').disabled=true;
   selectedStats();updateCapsules();
   msg('Изменение '+type+' применено в рабочей копии. Экспортируй GLB отдельно или восстанови оригинал.');
 }
@@ -185,6 +210,14 @@ $('bones').onchange=updateCapsules;
 $('radius').oninput=()=>{$('radius-value').textContent=Number($('radius').value).toFixed(2);updateCapsules();};
 $('capsules').onchange=updateCapsules;
 $('weightmap').onchange=updateCapsules;
+$('wireframe').onchange=updateWire;
+$('compare').onclick=()=>{
+  if(!pending)return;
+  const showingAfter=pending.mesh.geometry===pending.geometry;
+  pending.mesh.geometry=showingAfter?pending.before:pending.geometry;
+  $('compare').textContent=showingAfter?'Сравнение: ДО (показать ПОСЛЕ)':'Сравнение: ПОСЛЕ (показать ДО)';
+  selectedStats();updateCapsules();
+};
 $('simplify').onclick=async()=>{
   const mesh=selected();if(!mesh)return msg('Сначала загрузи GLB.');
   cancelPending();
@@ -197,6 +230,8 @@ $('simplify').onclick=async()=>{
     if(result.reason)return msg(result.reason);
     pending={mesh,geometry:result.geometry,before:mesh.geometry,type:'упрощения'};
     mesh.geometry=result.geometry;
+    $('compare').disabled=false;
+    $('compare').textContent='Сравнение: ПОСЛЕ (показать ДО)';
     selectedStats();updateCapsules();
     msg('Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
@@ -212,6 +247,8 @@ $('guard').onclick=()=>{
   if(result.reason)return msg(result.reason);
   pending={mesh,geometry:result.geometry,before:mesh.geometry,type:'защиты весов'};
   mesh.geometry=result.geometry;
+  $('compare').disabled=false;
+  $('compare').textContent='Сравнение: ПОСЛЕ (показать ДО)';
   selectedStats();updateCapsules();
   msg('Пробная защита: изменены веса '+fmt(result.changed)+' вершин. Убедись, что она не ухудшает хороший Meshy-риг. Исходник цел.');
 };
