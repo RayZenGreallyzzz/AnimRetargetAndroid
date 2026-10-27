@@ -13,7 +13,7 @@ The correct supplied binary is:
 - **Verified feature:** Woman / Chest Guard panel (`chest-guard-panel`, sliders for width, height, vertical offset, guard strength, preview and apply)
 - **Original Android package:** `com.rayzen.riganimationstudio.v74test` as embedded in Capacitor config (packaging name not equivalent to feature version)
 
-The binary provided in chat is **not published in this GitHub repository**, so the CI cannot download it automatically. To rebuild reproducibly, upload the exact APK to a GitHub Release as an asset (or another HTTPS-accessible location) and provide its URL when manually starting the workflow. The script verifies its SHA-256 and refuses any other file.
+The exact supplied APK is available in the conversation but **cannot be uploaded into GitHub Releases through the connected GitHub API tool**. Once uploaded to a pinned GitHub Release as an asset, Actions fetches it by name and asset ID **automatically**, using the built-in GitHub token. No manual HTTPS URL input or third-party file host is needed. The APK is then checked against the exact SHA-256 above before any build is allowed.
 
 ## Unified APK architecture
 
@@ -26,10 +26,20 @@ The binary provided in chat is **not published in this GitHub repository**, so t
 
 ## Build via GitHub Actions
 
-1. Upload the exact **Rig-Animation-Studio-v7.6-Chest-Guard-test.apk** to a GitHub release.
-2. Open this repo's **Actions** → **Phoenix Character Forge — Rig Studio 7.6 APK**.
-3. Select branch `integration/phoenix-character-suite`, choose **Run workflow**, and paste the APK HTTPS asset download link as `rig_apk_url`.
-4. Download the `PhoenixUnifiedStudio-test-APK` artifact after successful Gradle compilation.
+**One-time source upload (in the repo `RayZenGreallyzzz/AnimRetargetAndroid`):**
+1. Open `https://github.com/RayZenGreallyzzz/AnimRetargetAndroid/releases/new`.
+2. Choose **New tag** and enter exactly `phoenix-rig-v7.6-input` (create tag against the **main** branch; this is only a release container and does not change any files in main).
+3. Release title: `Phoenix Character Forge — original Rig v7.6 build input`.
+4. Attach the **exact original** `Rig-Animation-Studio-v7.6-Chest-Guard-test.apk` (84,054,098 bytes; SHA-256 `3e36c900a2746dd3cc4b2a71e8a295d6ec72dfcee892940910e3cc1c6fbc6243`) **before** publishing. Do not attach the previous `PhoenixUnifiedStudio` APK or a renamed/modified copy.
+5. Publish the release. The original APK is now stored in GitHub and is reusable for every new integration build.
+
+**Build/upgrade with no file or URL repeat:**
+1. Open this repo's **Actions → Phoenix Character Forge - exact Rig Studio 7.6 APK**.
+2. Click **Run workflow**, select branch `integration/phoenix-character-suite` and start. `character_ref` defaults to `main`. **No APK URL field exists.**
+3. CI looks up the fixed tag and filename using the repository GitHub API, verifies the APK's SHA-256, extracts the real v7.6 assets, bundles all four tabs, and compiles and signs the APK.
+4. Download GitHub Actions artifact **`PhoenixCharacterForge-test-APK`**. The `PhoenixCharacterForge-source-refs` artifact records the source release ID and hashes.
+
+The user-uploaded asset may become publicly downloadable if the repository is public; do not include any personal or secret content in the source APK. GitHub Releases is the only hosting destination used by this build.
 
 Workflow will **never silently fall back to the older Rig**. This is intentional to avoid losing working v7.6 features.
 
@@ -61,7 +71,7 @@ The early three-tab APK launched each editor, but they did not agree on a single
 
 ### CI verification
 
-`.github/workflows/phoenix-sync-checks.yml` runs JavaScript syntax checks, Python integration smoke tests and builds the Kotlin/native bridge with minimal placeholder HTML assets. A successful **build-only** APK from that job should not be distributed as the real v7.6 combined app. The real user-supplied Rig v7.6 APK is required by the separate release build workflow and is checked against its SHA-256.
+`.github/workflows/phoenix-sync-checks.yml` runs JavaScript syntax checks, Python integration smoke tests and builds the Kotlin/native bridge with minimal placeholder HTML assets. A successful **build-only** APK from that job should not be distributed as the real v7.6 combined app. The real user-supplied Rig v7.6 APK is fetched from the fixed tagged GitHub Release by the separate full build workflow and checked against its SHA-256.
 
 ### How to verify on the device
 
@@ -99,6 +109,6 @@ Added as a fourth **Optimize / Оптимизация** tab in the same Phoenix 
 - Capsules are an **editable weight-influence visual guide**, **not proof that Tripo internally uses this algorithm**; bone influences naturally overlap at joints and require blends rather than a hard cutoff.
 - Initial UI processes a selected mesh at a time, not all character meshes atomically, and protects facial blendshape geometry by skipping its topology changes.
 - Heavy GLBs on an Android 4GB tablet should be tested carefully; runtime performance and true synchronization between editors cannot be guaranteed from passing CI tests.
-- The native build is tested by CI with **placeholder Rig and Character assets**; the real unified APK requires the exact externally available v7.6 Chest Guard APK.
+- The native build is tested by CI with **placeholder Rig and Character assets**; the real unified APK requires the one-time pinned GitHub Release asset containing exact v7.6 Chest Guard APK.
 
 Source under \`integration/optimizer/\`, tests in \`integration/optimizer/mesh-tools.test.js\`; workflows build the optimizer and verify the native integration. Original repositories and your working Rig v7.6 APK remain untouched.
