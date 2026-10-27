@@ -1,4 +1,4 @@
-# Phoenix Unified Studio — Rig v7.6 / Retarget / Character
+# Phoenix Character Forge — Rig 7.6 · Retarget · Character
 
 This is a **separate integration branch**. Original source repositories are never modified.
 
@@ -27,7 +27,7 @@ The binary provided in chat is **not published in this GitHub repository**, so t
 ## Build via GitHub Actions
 
 1. Upload the exact **Rig-Animation-Studio-v7.6-Chest-Guard-test.apk** to a GitHub release.
-2. Open this repo's **Actions** → **Phoenix Unified Studio — exact Rig Studio 7.6 APK**.
+2. Open this repo's **Actions** → **Phoenix Character Forge — Rig Studio 7.6 APK**.
 3. Select branch `integration/phoenix-character-suite`, choose **Run workflow**, and paste the APK HTTPS asset download link as `rig_apk_url`.
 4. Download the `PhoenixUnifiedStudio-test-APK` artifact after successful Gradle compilation.
 
@@ -44,7 +44,7 @@ Workflow will **never silently fall back to the older Rig**. This is intentional
 
 Successful packaging **does not** prove full interoperability. Test all 3 tabs, import/export of real models, chest protection weights and animation, BVH / Mixamo retargeting, export and reimport of GLB, and memory consumption on a 4 GB tablet. Realtime shared skeleton and morph targets across tabs are **not** implemented yet.
 
-The locally produced first Rig 7.6 replacement APK uses a separate experimental application ID to avoid overwriting the earlier test suite. Android runtime tests are not yet available.
+The integrated Android launcher is named **Phoenix Character Forge** and keeps the existing experimental Android package suffix `.suite` to avoid silently losing the local workspace from earlier suite builds. The separate original apps are untouched. Changing the displayed app name does not change the installed app's private data or make the underlying editors share a live scene.
 
 
 ## Synchronization update (27 Oct 2026)
@@ -73,3 +73,8 @@ The early three-tab APK launched each editor, but they did not agree on a single
 6. Verify bones, weights, facial morphs and animations after each GLB export/import. Don't claim a full sync if any component is missing.
 
 If switching modules produces frame desynchronization **within playback** (rather than differing project files), that is a distinct timing/retargeting bug and requires a reproduction with an animation/model pair.
+
+
+## App identity
+
+The installed launcher reads **Phoenix Character Forge** (PCF). Within the app the three modules remain **Rig & Animation** (based on the user's exact v7.6 Chest Guard APK), **Retarget**, and **Character**. The title shown in the staged Rig HTML and the Character HTML is also **Phoenix Character Forge**, while the underlying working models and Rig 7.6 controls are kept unchanged. The Android application ID remains the existing integration package suffix `.suite` for compatibility with stored GLB files.
