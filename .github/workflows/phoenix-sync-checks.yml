@@ -1,0 +1,41 @@
+name: Phoenix Suite Synchronization Checks
+on:
+  push:
+    branches: [integration/phoenix-character-suite]
+    paths:
+      - 'integration/**'
+      - '.github/workflows/phoenix-sync-checks.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'integration/**'
+      - '.github/workflows/phoenix-sync-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check shared navigation and synchronization JS syntax
+        run: |
+          node --check integration/web/studio-shell.js
+          node --check integration/web/studio-sync.js
+      - name: Run offline integration tests
+        run: python3 -m unittest discover -s integration/tests -v
+      - name: Verify Rust-free native bridge interface contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          kotlin = Path("integration/kotlin/StudioWebActivity.kt").read_text()
+          web = Path("integration/web/studio-sync.js").read_text()
+          for method in ("getActiveFileJson", "beginSave", "appendSaveChunk", "finishSave", "cancelSave"):
+              assert ("fun " + method) in kotlin, method
+              assert ("bridge." + method + "(") in web, method
+          print("Native/WebView synchronization contract OK")
+          PY
