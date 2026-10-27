@@ -1,4 +1,4 @@
-/* Phoenix Unified Studio v2: reliable GLB handoff without cloning or mutating the 3D engines.
+/* Phoenix Character Forge v2: reliable GLB handoff without cloning or mutating the 3D engines.
  * Only publishes complete GLB files. Unsaved bone/animation/face edits remain in their
  * own editor until that editor explicitly exports a GLB.
  */
