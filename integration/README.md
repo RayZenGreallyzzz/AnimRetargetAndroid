@@ -34,10 +34,11 @@ The exact supplied APK is available in the conversation but **cannot be uploaded
 5. Publish the release. The original APK is now stored in GitHub and is reusable for every new integration build.
 
 **Build/upgrade with no file or URL repeat:**
-1. Open this repo's **Actions → Phoenix Character Forge - exact Rig Studio 7.6 APK**.
-2. Click **Run workflow**, select branch `integration/phoenix-character-suite` and start. `character_ref` defaults to `main`. **No APK URL field exists.**
-3. CI looks up the fixed tag and filename using the repository GitHub API, verifies the APK's SHA-256, extracts the real v7.6 assets, bundles all four tabs, and compiles and signs the APK.
-4. Download GitHub Actions artifact **`PhoenixCharacterForge-test-APK`**. The `PhoenixCharacterForge-source-refs` artifact records the source release ID and hashes.
+1. After the one-time upload, simply tell the assistant **"APK uploaded to the pinned GitHub Release"**. It can update `integration/release-build-trigger.txt` on the existing integration branch using its already-connected GitHub write access. The branch's `push` workflow starts automatically; **main remains unchanged**.
+2. CI looks up the fixed tag and filename using the repository GitHub API, verifies the APK's SHA-256, extracts the real v7.6 assets, bundles all four tabs, and compiles and signs the APK.
+3. Download GitHub Actions artifact **`PhoenixCharacterForge-test-APK`**. The `PhoenixCharacterForge-source-refs` artifact records the source release ID and hashes.
+
+**Manual alternative:** If the full build workflow is listed on GitHub Actions, choose it, set branch `integration/phoenix-character-suite`, and click **Run workflow**. There is no URL input. Some GitHub configurations only allow manual dispatch when workflow files already exist on the default branch. In that case, updating `integration/release-build-trigger.txt` on the integration branch is the reliable route.
 
 The user-uploaded asset may become publicly downloadable if the repository is public; do not include any personal or secret content in the source APK. GitHub Releases is the only hosting destination used by this build.
 
