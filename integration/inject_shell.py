@@ -64,7 +64,7 @@ def patch_branding(path: Path, editor: str) -> None:
     html = path.read_text(encoding="utf-8")
     updated, count = re.subn(r"<title[^>]*>.*?</title>",
         "<title>Phoenix Character Forge — " +
-        ("Rig 7.6" if editor == "rig" else "Character") + "</title>",
+        ("Rig 7.6" if editor == "rig" else "Оптимизация" if editor == "optimize" else "Character") + "</title>",
         html, count=1, flags=re.IGNORECASE | re.DOTALL)
     if count != 1:
         raise RuntimeError(f"Cannot set page title: {path}")
@@ -79,7 +79,7 @@ def patch_branding(path: Path, editor: str) -> None:
     path.write_text(updated, encoding="utf-8")
 
 
-def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_root: Path) -> None:
+def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_root: Path, optimizer_dist: Path | None = None) -> None:
     app = project / "app"
     manifest_file = app / "src/main/AndroidManifest.xml"
     gradle_file = app / "build.gradle.kts"
@@ -89,6 +89,9 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
         raise RuntimeError("Rig Animation Studio: dist/create.html missing")
     if not (character_dist / "index.html").is_file():
         raise RuntimeError("Character Studio: dist/index.html missing")
+
+    if optimizer_dist is not None and not (optimizer_dist / "index.html").is_file():
+        raise RuntimeError("Optimizer build: dist/index.html missing")
 
     tree = ET.parse(manifest_file)
     root = tree.getroot()
@@ -119,10 +122,10 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     # No original source file, rig weights, animations or chest-guard logic is changed.
     # Copy actual builds; browser is never pointed to live GitHub or web servers.
     dest = app / "src/main/assets/studio"
-    for name, source, entrypoint in (
-        ("rig", rig_dist, "create.html"),
-        ("character", character_dist, "index.html"),
-    ):
+    staged = [("rig", rig_dist, "create.html"), ("character", character_dist, "index.html")]
+    if optimizer_dist is not None:
+        staged.append(("optimize", optimizer_dist, "index.html"))
+    for name, source, entrypoint in staged:
         target = dest / name
         if target.exists():
             shutil.rmtree(target)
@@ -162,6 +165,7 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
         dest / "character/index.html",
         dest / "character/studio-shell.js",
         dest / "character/studio-sync.js",
+        *((dest / "optimize/index.html", dest / "optimize/studio-shell.js", dest / "optimize/studio-sync.js") if optimizer_dist is not None else ()),
         out,
     ):
         if not required.is_file() or required.stat().st_size < 50:
@@ -171,7 +175,8 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        raise SystemExit("Usage: inject_shell.py <native-app-root> <rig-dist> <character-dist>")
-    integrate(*[Path(x).resolve() for x in sys.argv[1:]],
-              Path(__file__).resolve().parent)
+    if len(sys.argv) not in (4, 5):
+        raise SystemExit("Usage: inject_shell.py <native-app-root> <rig-dist> <character-dist> [optimizer-dist]")
+    integrate(*[Path(x).resolve() for x in sys.argv[1:4]],
+              Path(__file__).resolve().parent,
+              Path(sys.argv[4]).resolve() if len(sys.argv) == 5 else None)
