@@ -15,8 +15,10 @@ on:
         default: 'main'
         type: string
 
+# GitHub's Draft Releases are hidden from ordinary read-only workflow identities.
+# Limit write scope to this explicitly triggered full build (not PR checks).
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   unified-apk:
