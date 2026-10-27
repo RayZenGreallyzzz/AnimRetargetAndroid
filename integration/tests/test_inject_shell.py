@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from integration.inject_shell import integrate, NS
+from integration.inject_shell import integrate, patch_branding, NS
 
 MANIFEST = f'''<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="{NS}" package="com.animretarget.app">
@@ -71,6 +71,18 @@ class MergeSmokeTests(unittest.TestCase):
             self.assertIn('applicationIdSuffix = ".suite"', gradle.read_text())
             self.assertEqual(app.get("{"+NS+"}label"),"Phoenix Character Forge")
             self.assertEqual(current.get("{"+NS+"}label"),"Phoenix Character Forge")
+
+    def test_reject_incomplete_v76_chest_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page=Path(tmp)/"create.html"
+            page.write_text(
+                "<html><head><title>Rig Animation Studio</title></head>"
+                "<body><small>v7.6 TEST · Защита груди</small></body></html>",
+                encoding="utf-8")
+            before=page.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "chest guard"):
+                patch_branding(page, "rig")
+            self.assertEqual(page.read_bytes(),before)
 
 if __name__=="__main__":
     unittest.main()
