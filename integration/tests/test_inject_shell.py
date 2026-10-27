@@ -44,10 +44,17 @@ class MergeSmokeTests(unittest.TestCase):
             assets=native/"app/src/main/assets/studio"
             self.assertIn("studio-shell.js",(assets/"rig/create.html").read_text())
             self.assertIn("studio-shell.js",(assets/"character/index.html").read_text())
+            self.assertIn("studio-sync.js",(assets/"rig/create.html").read_text())
+            self.assertIn("studio-sync.js",(assets/"character/index.html").read_text())
+            self.assertTrue((assets/"rig/studio-sync.js").stat().st_size > 100)
+            self.assertTrue((assets/"character/studio-sync.js").stat().st_size > 100)
             self.assertEqual((assets/"rig/assets/game.js").read_text(),"const rig = true;")
             output=native/"app/src/main/java/com/animretarget/app/StudioWebActivity.kt"
             self.assertIn("com.animretarget.app.MainActivity",output.read_text())
             self.assertIn("PhoenixWorkspaceBridge",output.read_text())
+            self.assertIn("getActiveFileJson",output.read_text())
+            self.assertIn("markActive",output.read_text())
+            self.assertIn("phoenix:activated",output.read_text())
             self.assertEqual((rig/"create.html").read_bytes(),original)
             self.assertIn('applicationIdSuffix = ".suite"', gradle.read_text())
             self.assertEqual(app.get("{"+NS+"}label"),"Phoenix Character Suite")
