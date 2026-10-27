@@ -1,5 +1,12 @@
 name: Phoenix Character Forge - exact Rig Studio 7.6 APK
 on:
+  # Full builds run from this integration branch, so the main branch stays untouched.
+  # After the verified release asset is uploaded, updating the trigger file
+  # starts an APK build without any UI workflow-dispatch dependency.
+  push:
+    branches: [integration/phoenix-character-suite]
+    paths:
+      - 'integration/release-build-trigger.txt'
   workflow_dispatch:
     inputs:
       character_ref:
