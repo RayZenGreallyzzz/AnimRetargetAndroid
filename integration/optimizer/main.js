@@ -122,14 +122,16 @@ function updateBones(){
 }
 function cancelPending(){
   if(!pending)return;
+  if(pending.mesh.geometry===pending.geometry)pending.mesh.geometry=pending.before;
   pending.geometry.dispose();pending=null;
+  selectedStats();updateCapsules();
   msg('Предпросмотр отменён, сетка не изменена.');
 }
 function apply(){
   if(!pending)return msg('Сначала создай предпросмотр.');
-  const {mesh,geometry,type}=pending;
-  if(!originals.has(mesh))originals.set(mesh,mesh.geometry);
-  else if(mesh.geometry!==originals.get(mesh))mesh.geometry.dispose();
+  const {mesh,geometry,type,before}=pending;
+  if(!originals.has(mesh))originals.set(mesh,before);
+  else if(before!==originals.get(mesh))before.dispose();
   mesh.geometry=geometry;pending=null;mesh.geometry.computeBoundingSphere();
   selectedStats();updateCapsules();
   msg('Изменение '+type+' применено в рабочей копии. Экспортируй GLB отдельно или восстанови оригинал.');
@@ -193,7 +195,9 @@ $('simplify').onclick=async()=>{
   try{
     const result=simplifyGeometry(mesh.geometry,target,{preserveUV:$('uv').checked,protectSkin:$('joint').checked});
     if(result.reason)return msg(result.reason);
-    pending={mesh,geometry:result.geometry,type:'упрощения'};
+    pending={mesh,geometry:result.geometry,before:mesh.geometry,type:'упрощения'};
+    mesh.geometry=result.geometry;
+    selectedStats();updateCapsules();
     msg('Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
       (result.triangles>target?' Ограничения UV/костей не позволили достичь цели.':'')+
@@ -206,7 +210,9 @@ $('guard').onclick=()=>{
   cancelPending();playing=false;
   const result=guardSkinToCapsules(mesh.geometry,getBindCapsules(mesh,Number($('radius').value)));
   if(result.reason)return msg(result.reason);
-  pending={mesh,geometry:result.geometry,type:'защиты весов'};
+  pending={mesh,geometry:result.geometry,before:mesh.geometry,type:'защиты весов'};
+  mesh.geometry=result.geometry;
+  selectedStats();updateCapsules();
   msg('Пробная защита: изменены веса '+fmt(result.changed)+' вершин. Убедись, что она не ухудшает хороший Meshy-риг. Исходник цел.');
 };
 $('apply').onclick=apply;
@@ -214,6 +220,7 @@ $('undo').onclick=cancelPending;
 $('reset').onclick=restore;
 $('export').onclick=async()=>{
   if(!character)return msg('Нет модели для экспорта.');
+  if(pending)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
   try{
     playing=false;msg('Сохраняю GLB...');
     const output=await exporter.parseAsync(character,{binary:true,trs:true,animations,onlyVisible:false,maxTextureSize:2048});
