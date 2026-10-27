@@ -76,7 +76,7 @@ class StudioWebActivity : Activity() {
             }
             return
         }
-        val next = if (name == "character") "character" else "rig"
+        val next = if (name in setOf("character", "optimize")) name else "rig"
         if (next == selected && views[next]?.visibility == android.view.View.VISIBLE) return
         views[selected]?.apply {
             onPause()
@@ -244,7 +244,7 @@ class StudioWebActivity : Activity() {
         views[selected]?.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
     }
     override fun onBackPressed() {
-        if(selected == "character") {
+        if(selected == "character" || selected == "optimize") {
             openTool("rig")
         } else if (views["rig"]?.canGoBack() == true) {
             views["rig"]?.goBack()
@@ -296,7 +296,7 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
 
     @JavascriptInterface
     fun openTool(tool: String) {
-        if (tool !in setOf("rig", "retarget", "character")) return
+        if (tool !in setOf("rig", "retarget", "character", "optimize")) return
         app.runOnUiThread { app.openTool(tool) }
     }
 
