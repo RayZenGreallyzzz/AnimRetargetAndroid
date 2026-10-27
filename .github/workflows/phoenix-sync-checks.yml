@@ -39,3 +39,45 @@ jobs:
               assert ("bridge." + method + "(") in web, method
           print("Native/WebView synchronization contract OK")
           PY
+
+  android-native-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract checked native Retarget sources
+        shell: bash
+        run: |
+          base64 -d payload/AnimRetargetAndroid_sources.b64 > /tmp/retarget.tar.bz2
+          echo '18c9b6025a2567c4f2a004aab12213c2d1b26649c258427375bef6ef350e9f56  /tmp/retarget.tar.bz2' | sha256sum -c -
+          tar -xjf /tmp/retarget.tar.bz2
+          python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
+      - name: Inject minimal local WebView assets (build-only validation)
+        run: |
+          mkdir -p /tmp/rig-build /tmp/character-build
+          printf '<html><head></head><body>Rig CI placeholder</body></html>' > /tmp/rig-build/create.html
+          printf '<html><head></head><body>Character CI placeholder</body></html>' > /tmp/character-build/index.html
+          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/rig-build /tmp/character-build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+      - name: Ensure Android SDK is present
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-34' 'build-tools;34.0.0'
+      - name: Compile native synchronization bridge (not a release APK)
+        working-directory: AnimRetargetAndroid
+        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Validate test APK packaging
+        shell: bash
+        run: |
+          APK="AnimRetargetAndroid/app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_HOME/build-tools/34.0.0/zipalign" -c -v 4 "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose "$APK"
