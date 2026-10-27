@@ -55,8 +55,8 @@ jobs:
       - name: Inject minimal local WebView assets (build-only validation)
         run: |
           mkdir -p /tmp/rig-build /tmp/character-build
-          printf '<html><head></head><body>Rig CI placeholder</body></html>' > /tmp/rig-build/create.html
-          printf '<html><head></head><body>Character CI placeholder</body></html>' > /tmp/character-build/index.html
+          printf '<html><head><title>Rig Animation Studio</title></head><body>Rig CI placeholder</body></html>' > /tmp/rig-build/create.html
+          printf '<html><head><title>Character Studio</title></head><body>Character CI placeholder</body></html>' > /tmp/character-build/index.html
           python3 integration/inject_shell.py AnimRetargetAndroid /tmp/rig-build /tmp/character-build
       - uses: actions/setup-java@v4
         with:
