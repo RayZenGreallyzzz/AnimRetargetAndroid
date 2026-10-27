@@ -25,8 +25,8 @@ class MergeSmokeTests(unittest.TestCase):
             manifest.write_text(MANIFEST,encoding="utf-8")
             gradle=native/"app/build.gradle.kts"
             gradle.write_text('plugins { id("com.android.application") }\n',encoding="utf-8")
-            rig=base/"rig"; character=base/"character"
-            rig.mkdir();character.mkdir()
+            rig=base/"rig"; character=base/"character"; optimizer=base/"optimize"
+            rig.mkdir();character.mkdir();optimizer.mkdir()
             (rig/"create.html").write_text('<html><head><title>Rig Animation Studio</title></head>'
                 '<body><div id="ras-branding" aria-label="Rig Animation Studio">'
                 '<span class="ras-brand-copy"><strong>Rig Animation Studio</strong>'
@@ -36,8 +36,9 @@ class MergeSmokeTests(unittest.TestCase):
             (rig/"assets").mkdir()
             (rig/"assets/game.js").write_text("const rig = true;")
             (character/"index.html").write_text("<html><head><title>Character Studio</title></head><body>Character Studio</body></html>")
+            (optimizer/"index.html").write_text("<html><head><title>Optimize</title></head><body>Optimization</body></html>",encoding="utf-8")
             original=(rig/"create.html").read_bytes()
-            integrate(native,rig,character,Path(__file__).resolve().parents[1])
+            integrate(native,rig,character,Path(__file__).resolve().parents[1],optimizer)
             root=ET.parse(manifest).getroot()
             app=root.find("application")
             nsname="{"+NS+"}name"
@@ -51,6 +52,10 @@ class MergeSmokeTests(unittest.TestCase):
             self.assertIn("studio-shell.js",(assets/"character/index.html").read_text())
             self.assertIn("studio-sync.js",(assets/"rig/create.html").read_text())
             self.assertIn("studio-sync.js",(assets/"character/index.html").read_text())
+            self.assertIn("studio-sync.js",(assets/"optimize/index.html").read_text())
+            self.assertIn("studio-shell.js",(assets/"optimize/index.html").read_text())
+            self.assertIn("<title>Phoenix Character Forge — Оптимизация</title>",
+                          (assets/"optimize/index.html").read_text())
             self.assertIn("<title>Phoenix Character Forge — Rig 7.6</title>",
                           (assets/"rig/create.html").read_text())
             self.assertIn("<strong>Phoenix Character Forge</strong>",
@@ -64,6 +69,7 @@ class MergeSmokeTests(unittest.TestCase):
             output=native/"app/src/main/java/com/animretarget/app/StudioWebActivity.kt"
             self.assertIn("com.animretarget.app.MainActivity",output.read_text())
             self.assertIn("PhoenixWorkspaceBridge",output.read_text())
+            self.assertIn('"optimize"',output.read_text())
             self.assertIn("getActiveFileJson",output.read_text())
             self.assertIn("markActive",output.read_text())
             self.assertIn("phoenix:activated",output.read_text())
