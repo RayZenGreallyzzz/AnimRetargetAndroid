@@ -87,6 +87,15 @@ class StudioWebActivity : Activity() {
     private fun createEditor(name: String): WebView {
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/workspace/", object : WebViewAssetLoader.PathHandler {
+                override fun handle(path: String): WebResourceResponse? {
+                    val name = Uri.decode(path)
+                    val file = bridge.resolveWorkspaceRead(name) ?: return null
+                    return try {
+                        WebResourceResponse("model/gltf-binary", null, FileInputStream(file))
+                    } catch (_: Exception) { null }
+                }
+            })
             .build()
         val web = WebView(this)
         val settings = web.settings
@@ -373,6 +382,16 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
         }
         return a.toString()
     }
+    // Load large GLB files by streaming them from the APK's local HTTPS origin
+    // rather than moving the whole model across the JS bridge as Base64.
+    fun resolveWorkspaceRead(name: String): File? = approved(name)
+
+    @JavascriptInterface
+    fun getWorkspaceUrl(name: String): String {
+        if (approved(name) == null) return ""
+        return "https://appassets.androidplatform.net/workspace/" + Uri.encode(name)
+    }
+
     @JavascriptInterface
     fun getFileSize(name: String): Long = approved(name)?.length() ?: -1L
 
