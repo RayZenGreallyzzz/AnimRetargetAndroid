@@ -4,7 +4,7 @@
   "use strict";
   const native = window.PhoenixNative;
   const rootPath = location.pathname;
-  const tool = rootPath.includes("/character/") ? "character" : "rig";
+  const tool = rootPath.includes("/optimize/") ? "optimize" : (rootPath.includes("/character/") ? "character" : "rig");
   const ACCENT = "#ff8a36";
   const rules = [
     ".phoenix-suite-tabs{display:flex;align-items:center;gap:5px;max-width:100%;overflow-x:auto;scrollbar-width:thin;padding:4px 5px;border-radius:12px;background:#151820;border:1px solid #444a55;z-index:2100}",
@@ -41,6 +41,7 @@
   function escapeHTML(x) {return String(x).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   const destinations = tool === "character"
     ? [{id:"base-file",label:"Персонаж (GLB)"},{id:"detail-file",label:"Деталь (GLB)"},{id:"project-file",label:"Проект (.pcs)"}]
+    : tool === "optimize" ? [{id:"opt-model-file",label:"Оптимизация (GLB)"}]
     : [{id:"model-upload",label:"Модель (GLB/FBX/ZIP)"},{id:"import-animations-input",label:"Анимации (GLB)"}];
 
   function chosenInputs() {
@@ -126,7 +127,7 @@
     toast("Загружено в "+(tool==="rig"?"Rig":"Character")+": "+name);
   }
   function buildTabs() {
-    document.title = "Phoenix Character Forge — " + (tool === "rig" ? "Риг и анимация" : "Персонаж");
+    document.title = "Phoenix Character Forge — " + (tool === "rig" ? "Риг и анимация" : tool === "optimize" ? "Оптимизация" : "Персонаж");
     const subheading = document.querySelector(".ras-brand-copy strong");
     if (subheading) subheading.textContent = "Phoenix Character Forge";
     const characterName = document.querySelector("header .brand strong");
@@ -141,6 +142,7 @@
       {tool:"rig",label:"🦴 Риг и анимация"},
       {tool:"retarget",label:"🔁 Ретаргетинг"},
       {tool:"character",label:"🎭 Персонаж"},
+      {tool:"optimize",label:"🧩 Оптимизация"},
     ];
     for(const item of items){
       const btn=document.createElement("button");btn.type="button";btn.textContent=item.label;
