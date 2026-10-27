@@ -104,9 +104,12 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
             shutil.rmtree(target)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, target)
-        patch_html(target / entrypoint)
+        patch_html(target / entrypoint, "studio-shell.js")
+        patch_html(target / entrypoint, "studio-sync.js")
         shutil.copyfile(integration_root / "web/studio-shell.js",
                         target / "studio-shell.js")
+        shutil.copyfile(integration_root / "web/studio-sync.js",
+                        target / "studio-sync.js")
 
     # WebViewAssetLoader serves the web bundles from the packaged app.
     gradle = gradle_file.read_text(encoding="utf-8")
@@ -130,8 +133,10 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
     for required in (
         dest / "rig/create.html",
         dest / "rig/studio-shell.js",
+        dest / "rig/studio-sync.js",
         dest / "character/index.html",
         dest / "character/studio-shell.js",
+        dest / "character/studio-sync.js",
         out,
     ):
         if not required.is_file() or required.stat().st_size < 50:
