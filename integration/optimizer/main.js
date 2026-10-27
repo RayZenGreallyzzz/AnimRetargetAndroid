@@ -27,8 +27,9 @@ const ui=[
 '<label>Радиус капсул: <span id="radius-value">1.00</span>×<input id="radius" type="range" min=".4" max="2.8" step=".1" value="1"/></label>',
 '<label class="toggle"><input id="capsules" type="checkbox" checked/> Показывать капсулы вокруг костей</label>',
 '<label class="toggle"><input id="weightmap" type="checkbox"/> Отмечать вершины с весом выбранной кости</label>',
+'<label class="toggle"><input id="reassign" type="checkbox"/> Исправить совсем чужие кости на одежде (осторожно)</label>',
 '<div class="buttons"><button id="guard">Предпросмотр защиты весов</button><button id="apply" class="primary">Применить</button></div>',
-'<p>Вес не обрывается по границе капсулы, а плавно уменьшается. Для одежды вес проверяется на её собственном меше. Сначала проверяй плечи, грудь и сгибы.</p>',
+'<p>Радиусы капсул рассчитываются по вершинам в BindPose, отдельно для каждого меша. Вес плавно уменьшается за пределами капсулы. Исправление чужих костей выключено по умолчанию. Проверяй плечи, грудь и сгибы.</p>',
 '<h3>03 / Результат</h3><div id="status"></div>',
 '<div class="buttons"><button id="export" class="primary">Экспорт отдельного GLB</button><button id="reset">Восстановить исходник</button></div>',
 '<p>Сохраняются UV, материалы, привязка и клипы. Не перезаписывай исходную модель до проверки результата.</p>',
@@ -243,14 +244,19 @@ $('guard').onclick=()=>{
   const mesh=selected();
   if(!mesh?.isSkinnedMesh)return msg('Выбери отдельный скинненный меш персонажа или одежды.');
   cancelPending();playing=false;
-  const result=guardSkinToCapsules(mesh.geometry,getBindCapsules(mesh,Number($('radius').value)));
+  const result=guardSkinToCapsules(mesh.geometry,getBindCapsules(mesh,Number($('radius').value)),
+    {allowReassign:$('reassign').checked});
   if(result.reason)return msg(result.reason);
   pending={mesh,geometry:result.geometry,before:mesh.geometry,type:'защиты весов'};
   mesh.geometry=result.geometry;
   $('compare').disabled=false;
   $('compare').textContent='Сравнение: ПОСЛЕ (показать ДО)';
   selectedStats();updateCapsules();
-  msg('Пробная защита: изменены веса '+fmt(result.changed)+' вершин. Убедись, что она не ухудшает хороший Meshy-риг. Исходник цел.');
+  msg('Пробная защита: изменены веса '+fmt(result.changed)+
+    ' вершин; потенциально чужие кости: '+fmt(result.outOfCapsule)+
+    '; переназначено: '+fmt(result.reassigned)+
+    '; требуют ручной проверки: '+fmt(result.unresolved)+
+    '. Хороший риг Meshy исправлять не нужно. Исходник сохранён.');
 };
 $('apply').onclick=apply;
 $('undo').onclick=cancelPending;
