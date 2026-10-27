@@ -88,7 +88,19 @@ function clearCapsules(){
   capsuleGroup.clear();
   if(weightDots){weightDots.parent?.remove(weightDots);weightDots.geometry.dispose();weightDots.material.dispose();weightDots=null;}
 }
+function setBindPose(){
+  // The GLB can contain an active/warm-started walking clip. A bind-space
+  // capsule must be compared with its matching undeformed body, not an
+  // animated mesh in a different pose.
+  playing=false;
+  if(mixer)mixer.stopAllAction();
+  if(character){
+    character.traverse(n=>{if(n.isSkinnedMesh)n.skeleton.pose();});
+    character.updateMatrixWorld(true);
+  }
+}
 function updateCapsules(){
+  if($('capsules').checked||$('weightmap').checked)setBindPose();
   clearCapsules();
   const mesh=selected();
   updateWire();
@@ -185,7 +197,9 @@ function setModel(gltf,name){
   character=gltf.scene;scene.add(character);character.updateMatrixWorld(true);
   animations=gltf.animations||[];
   mixer=animations.length?new THREE.AnimationMixer(character):null;
-  if(mixer){mixer.clipAction(animations[0]).play();playing=true;}
+  if(mixer&&!$('capsules').checked&&!$('weightmap').checked){
+    mixer.clipAction(animations[0]).play();playing=true;
+  }else setBindPose();
   meshes=describe(character).meshes;
   $('meshes').replaceChildren();
   meshes.forEach((m,i)=>{
@@ -193,7 +207,7 @@ function setModel(gltf,name){
     option.textContent=m.name+' · '+fmt(m.triangles)+' △';$('meshes').append(option);
   });
   $('meshes').value=0;updateBones();fit();selectedStats();
-  msg('Загружено: '+name+'. Исходная модель не изменена.');
+  msg('Загружено: '+name+'. Для проверки капсул показана исходная поза скелета (BindPose), анимация остановлена. Сравни с поверхностью перед коррекцией весов.');
 }
 $('opt-model-file').onchange=async e=>{
   const file=e.target.files?.[0];if(!file)return;
@@ -244,6 +258,7 @@ $('guard').onclick=()=>{
   const mesh=selected();
   if(!mesh?.isSkinnedMesh)return msg('Выбери отдельный скинненный меш персонажа или одежды.');
   cancelPending();playing=false;
+  setBindPose();
   const result=guardSkinToCapsules(mesh.geometry,getBindCapsules(mesh,Number($('radius').value)),
     {allowReassign:$('reassign').checked});
   if(result.reason)return msg(result.reason);
