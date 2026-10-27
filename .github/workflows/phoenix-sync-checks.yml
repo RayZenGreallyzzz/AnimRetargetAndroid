@@ -1,4 +1,4 @@
-name: Phoenix Suite Synchronization Checks
+name: Phoenix Character Forge - Integration Checks
 on:
   push:
     branches: [integration/phoenix-character-suite]
