@@ -15,3 +15,5 @@ Build Woman profile: Human → Woman → Humanoid; breast/tail/wings/ears switch
 2026-10-28: anatomy anchored Character Studio and skin mask tests; compile with fix/anatomical-anchors-and-skinning.
 
 Retry: corrected landmark scale when skinned geometry absent (head, ears, hair).
+
+Final 2026-10-28 anatomy trial: matched bind pose capsules, real Character Studio symmetrical bones + breast skin, correct Woman GLB world-space preset.
