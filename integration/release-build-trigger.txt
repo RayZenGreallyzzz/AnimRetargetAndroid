@@ -21,3 +21,5 @@ Final 2026-10-28 anatomy trial: matched bind pose capsules, real Character Studi
 2026-10-28 Forge protected-Woman test: Character ref feature/forge77-anatomy-skin-and-sync-20261028; explicit body mesh selection; torso-only breast weighting; validated GLB motion donor; unchanged Rig v7.6 + Optimize + native Retarget. Preserve separate .suitecaps installation.
 
 2026-10-28 surface islands update: Character branch feature/forge77-anatomy-skin-and-sync-20261028; mesh-islands connected-component body selector + visual highlight + anatomical weights restricted to selected skin component. Test separate-garment island and UV seams. Keep Rig v7.6 SHA, native Retarget and Optimize unchanged.
+
+Final Islands package isolation: build installation suffix .suiteislands, keeping previous .suite and .suitecaps apps intact. Same verified original Rig 7.6 asset.
