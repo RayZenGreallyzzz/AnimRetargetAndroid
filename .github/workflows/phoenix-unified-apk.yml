@@ -12,7 +12,7 @@ on:
       character_ref:
         description: 'Character Studio source ref'
         required: true
-        default: 'fix/anatomical-anchors-and-skinning'
+        default: 'feature/forge77-anatomy-skin-and-sync-20261028'
         type: string
 
 # GitHub's Draft Releases are hidden from ordinary read-only workflow identities.
@@ -30,7 +30,7 @@ jobs:
 
       - name: Fetch Character Studio copy (original stays untouched)
         env:
-          CHARACTER_REF: ${{ inputs.character_ref || 'fix/anatomical-anchors-and-skinning' }}
+          CHARACTER_REF: ${{ inputs.character_ref || 'feature/forge77-anatomy-skin-and-sync-20261028' }}
         run: |
           git clone --depth 1 --branch "$CHARACTER_REF" https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/phoenix-character
           echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
@@ -67,6 +67,8 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm test
+          test -s src/retarget-compat.js
+          grep -q 'id="body-skin"' src/main.js
           npm run build -- --base=./
           test -s dist/index.html
 
