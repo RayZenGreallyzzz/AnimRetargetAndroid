@@ -113,3 +113,17 @@ Added as a fourth **Optimize / Оптимизация** tab in the same Phoenix 
 - The native build is tested by CI with **placeholder Rig and Character assets**; the real unified APK requires the one-time pinned GitHub Release asset containing exact v7.6 Chest Guard APK.
 
 Source under \`integration/optimizer/\`, tests in \`integration/optimizer/mesh-tools.test.js\`; workflows build the optimizer and verify the native integration. Original repositories and your working Rig v7.6 APK remain untouched.
+
+
+## Forge 7.7 test — selected body mesh + animation donor (28 Oct 2026)
+
+The unified build uses Character Studio source branch `feature/forge77-anatomy-skin-and-sync-20261028`, branched from `fix/anatomical-anchors-and-skinning`, **not from the old Character 0.1 prototype**. It preserves anatomically placed Woman bones and adds:
+
+- A selectable **anatomical body SkinnedMesh**. Clothing, shoes, hair and accessories stored in separate skinned meshes are excluded from breast-weight edits. Ambiguous meshes are not auto-selected.
+- Additional torso-bone weight and left/right body-region checks for newly created breast influences, on top of existing anatomical position masks. Existing weights and animation are kept unless explicitly edited.
+- A **GLB animation donor** import button: only directly compatible core skeleton names, parent relationships and local rest orientations are accepted. Different skeletons still require real retargeting; this is a compatibility gate, not a universal solution.
+- Body selection and animation donors saved in editable `.pcs` project files.
+
+The Optimizer tab still offers bind-pose capsules, a conservative skin-weight preview, and opt-in repairs. Real-time synchronized scene state remains unimplemented: GLB is the exchange format, and native Retarget still requires Android SAF import after explicit export. If body and garments are fused into **one** mesh, neither name recognition nor torso masks can guarantee separation; split geometry or paint a semantic mask before applying weights.
+
+**Testing:** Character unit tests, web build, and Android workflow; integration smoke tests; exact v7.6 APK SHA; full APK signing/zipalign on release run. Device-only requirements: test female walking/squats, breast/shoulder deformation, skirt sleeves, switching tabs after exporting, and preserving GLB animations/morphs.
