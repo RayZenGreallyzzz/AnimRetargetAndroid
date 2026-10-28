@@ -68,6 +68,8 @@ jobs:
           npm install --no-audit --no-fund
           npm test
           test -s src/retarget-compat.js
+          test -s src/mesh-islands.js
+          grep -q 'id="body-surface"' src/main.js
           grep -q 'id="body-skin"' src/main.js
           npm run build -- --base=./
           test -s dist/index.html
