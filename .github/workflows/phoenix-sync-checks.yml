@@ -26,6 +26,16 @@ jobs:
         run: |
           node --check integration/web/studio-shell.js
           node --check integration/web/studio-sync.js
+      - name: Validate the real anatomical Character module (not old prototype)
+        run: |
+          git clone --depth 1 --branch feature/forge77-anatomy-skin-and-sync-20261028 https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/forge-woman
+          test -s /tmp/forge-woman/src/rig-anatomy.js
+          test -s /tmp/forge-woman/src/retarget-compat.js
+          grep -q 'id="body-skin"' /tmp/forge-woman/src/main.js
+          cd /tmp/forge-woman
+          npm install --no-audit --no-fund
+          npm test
+          npm run build -- --base=./
       - name: Test and compile Geometry Optimizer
         working-directory: integration/optimizer
         run: |
