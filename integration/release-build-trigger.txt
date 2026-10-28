@@ -17,3 +17,5 @@ Build Woman profile: Human → Woman → Humanoid; breast/tail/wings/ears switch
 Retry: corrected landmark scale when skinned geometry absent (head, ears, hair).
 
 Final 2026-10-28 anatomy trial: matched bind pose capsules, real Character Studio symmetrical bones + breast skin, correct Woman GLB world-space preset.
+
+2026-10-28 Forge protected-Woman test: Character ref feature/forge77-anatomy-skin-and-sync-20261028; explicit body mesh selection; torso-only breast weighting; validated GLB motion donor; unchanged Rig v7.6 + Optimize + native Retarget. Preserve separate .suitecaps installation.
