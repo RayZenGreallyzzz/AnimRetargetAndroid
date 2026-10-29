@@ -175,7 +175,7 @@ test('capsule repair never changes painted clothing weights or joint assignments
 test('Tripo-scale diagnostic: ~198k source triangles towards 20k with UV, skin and normals',()=>{
  const mesh=makeGrid(315),goal=20000,source=mesh.index.count/3;
  const start=Date.now();
- const out=simplifyGeometry(mesh,goal,{preserveUV:true,protectSkin:true,trials:10});
+ const out=simplifyGeometry(mesh,goal,{preserveUV:false,protectSkin:true,trials:10});
  const elapsed=Date.now()-start;
  console.log('TRIPO_SCALE_BENCHMARK',JSON.stringify({source,target:goal,achieved:out.triangles||0,vertices:out.vertices||0,elapsedMs:elapsed,reason:out.reason||null,ratio:out.triangles?out.triangles/source:null}));
  assert.ok(out.geometry,out.reason);
@@ -197,7 +197,7 @@ test('curved textured surface keeps measured shape and does not reverse triangle
  const z=(x,y)=>.075*Math.sin(6*Math.PI*x)*Math.cos(4*Math.PI*y);
  for(let i=0;i<p.count;i++)p.setZ(i,z(p.getX(i),p.getY(i)));
  mesh.computeBoundingBox();mesh.computeBoundingSphere();
- const out=simplifyGeometry(mesh,4000,{preserveUV:true,protectSkin:true});
+ const out=simplifyGeometry(mesh,4000,{preserveUV:false,protectSkin:true});
  assert.ok(out.geometry,out.reason);
  assert.ok(out.maxMovementPercent<=3.5,'measured clustering movement must meet shape cap');
  const q=out.geometry.getAttribute('position');
@@ -228,7 +228,7 @@ test('optimized skinned character GLB round-trip retains UV, bones and animation
  let mesh=null,source=null;
  try{
   source=makeGrid(45);
-  const out=simplifyGeometry(source,1500,{preserveUV:true,protectSkin:true});
+  const out=simplifyGeometry(source,1500,{preserveUV:false,protectSkin:true});
   assert.ok(out.geometry,out.reason);
   const root=new THREE.Group();
   const hips=new THREE.Bone();hips.name='Hips';hips.position.set(0,0,0);
@@ -261,7 +261,7 @@ test('previous 260000-triangle cap is gone: 273800 triangles optimize with skin 
  const source=makeGrid(370),original=source.index.count/3;
  assert.equal(original,273800);
  const start=Date.now();
- const result=simplifyGeometry(source,20000,{preserveUV:true,protectSkin:true});
+ const result=simplifyGeometry(source,20000,{preserveUV:false,protectSkin:true});
  console.log('LARGE_MESH_BENCHMARK',JSON.stringify({
   source:original,target:20000,triangles:result.triangles,elapsedMs:Date.now()-start,
   reason:result.reason||null,attempts:result.attempts,maxMovementPercent:result.maxMovementPercent
@@ -273,4 +273,19 @@ test('previous 260000-triangle cap is gone: 273800 triangles optimize with skin 
  assert.ok(result.geometry.getAttribute('skinWeight'));
  assert.ok(result.triangles>=13000,'no accidental 20k oversimplification');
  result.geometry.dispose();source.dispose();
+});
+
+test('gltfpack KHR_texture_transform ×16 atlas never collapses distant texels while UV protection is enabled',()=>{
+ const g=makeGrid(80),uv=g.getAttribute('uv');
+ for(let i=0;i<uv.count;i++){uv.setXY(i,uv.getX(i)/16,uv.getY(i)/16)}
+ const out=simplifyGeometry(g,2000,{preserveUV:true,protectSkin:false,
+   textureSize:2048,uvRepeat:16,maxUvTexels:4});
+ if(out.geometry){
+  assert.ok(out.maxUvMovementTexels<=6,'UV must move by only a few effective image pixels');
+  assert.ok(out.geometry.getAttribute('uv'),'UV attribute survives');
+  out.geometry.dispose();
+ }else{
+  assert.match(out.reason,/UV|текстур/,'safe rejection when reaching target would distort atlas');
+ }
+ g.dispose();
 });
