@@ -13,9 +13,15 @@ function memoryBudget(){
 function geometryBytes(g){
  let n=g.index?.array?.byteLength||0;
  for(const a of Object.values(g.attributes)){
-  if(a.isInterleavedBufferAttribute) return {reason:'Переплетённые атрибуты: сначала пересоздай GLB без InterleavedBufferAttribute.'};
-  if(!a.array?.byteLength) return {reason:'Неподдерживаемый буфер атрибута.'};
-  n+=a.array.byteLength;
+  if(a.isInterleavedBufferAttribute){
+   // gltfpack packs POSITION/NORMAL into nonstandard byte strides.
+   // A safe deinterleave into FLOAT32 is included in the estimate.
+   if(!a.count||a.itemSize>4)return {reason:'Неизвестный формат чередующихся атрибутов.'};
+   n+=a.count*a.itemSize*4;
+  }else{
+   if(!a.array?.byteLength)return {reason:'Неподдерживаемый буфер атрибута.'};
+   n+=a.array.byteLength;
+  }
  }
  const pos=g.getAttribute('position');
  const tri=(g.index?.count||pos?.count||0)/3;
@@ -25,8 +31,26 @@ function geometryBytes(g){
 function pack(g){
  const attributes={},transfers=[];
  for(const [name,a] of Object.entries(g.attributes)){
-  const array=a.array.slice(); // deliberate clone; original GLB stays renderable
-  attributes[name]={array,itemSize:a.itemSize,normalized:a.normalized};
+  let array,normalized=a.normalized;
+  if(a.isInterleavedBufferAttribute){
+   // GLTFLoader uses InterleavedBufferAttribute for gltfpack quantized
+   // POSITION (VEC3 uint16 stride8) and NORMAL (VEC3 int8 stride4).
+   // Getter methods return normalized values when required; copying raw
+   // underlying interleaved buffer would corrupt all attribute offsets.
+   if(a.itemSize<1||a.itemSize>4)throw Error('Атрибут с неподдерживаемым числом компонент: '+name);
+   array=name==='skinIndex'?new Uint16Array(a.count*a.itemSize):new Float32Array(a.count*a.itemSize);
+   const access=[a.getX?.bind(a),a.getY?.bind(a),a.getZ?.bind(a),a.getW?.bind(a)];
+   for(let i=0;i<a.count;i++){
+    for(let k=0;k<a.itemSize;k++){
+     if(!access[k])throw Error('Неподдерживаемый атрибут '+name);
+     array[i*a.itemSize+k]=access[k](i);
+    }
+   }
+   normalized=false; // values were unpacked via getters into floats
+  }else{
+   array=a.array.slice(); // clone so the source remains renderable
+  }
+  attributes[name]={array,itemSize:a.itemSize,normalized};
   transfers.push(array.buffer);
  }
  const index=g.index?.array?.slice()||null;
