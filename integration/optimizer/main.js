@@ -258,7 +258,7 @@ $('simplify').onclick=async()=>{
     selectedStats();updateCapsules();
     msg('Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
-      ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+'%.'+
+      ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+'%; макс. сдвиг вершин '+result.maxMovementPercent+'% диагонали модели.'+
       (Math.abs(result.targetErrorPercent)>15?' ВНИМАНИЕ: точность цели плохая — проверь сетку до применения.':'')+
       ' Исходник не изменён. Нажми «Применить» или «Отменить».');
   }catch(e){msg('Ошибка оптимизации: '+e.message);}
