@@ -57,7 +57,14 @@ function cluster(g,cell,options={}){
   // Keep the original typed index view and generate sequential indices on demand.
   const index=g.index,source=index?.array||null,sourceLength=index?.count??count;
   const map=new Map(),buckets=[],oldToNew=new Int32Array(count);
-  const uvCell=Math.max(.005,cell*.1);
+  // UV coordinates are dimensionless, while cell is in POSITION units.
+  // gltfpack can quantize POSITION to 0..16383 and remap UV via a ×16
+  // KHR_texture_transform. Scaling UV cells from POSITION length (old code)
+  // collapsed an entire texture atlas into one bucket despite "protect UV".
+  const texSize=Math.max(128,Math.min(16384,Number(options.textureSize)||2048));
+  const uvRepeat=Math.max(1,Math.min(128,Number(options.uvRepeat)||1));
+  const maxUvTexels=Math.max(.5,Math.min(64,Number(options.maxUvTexels)||4));
+  const uvCell=maxUvTexels/(texSize*uvRepeat);
   for(let i=0;i<count;i++){
     let key=[Math.floor(pos.getX(i)/cell),Math.floor(pos.getY(i)/cell),Math.floor(pos.getZ(i)/cell)].join(',');
     if(options.preserveUV!==false && uv)key+='|u'+Math.floor(uv.getX(i)/uvCell)+':'+Math.floor(uv.getY(i)/uvCell);
@@ -143,9 +150,21 @@ function cluster(g,cell,options={}){
       sumSquaredMovement+=squared;movedCount++;
     }
   }
+  // Measure actual texture-coordinate movement in material pixel units.
+  let maxUvMovementTexels=0;
+  if(uv){
+    const outUV=result.getAttribute('uv'),ratio=texSize*uvRepeat;
+    for(let i=0;i<active.length;i++){
+      const bucket=active[i],u=outUV.getX(i),v=outUV.getY(i);
+      for(const vi of bucket){
+        const error=Math.hypot(u-uv.getX(vi),v-uv.getY(vi))*ratio;
+        if(error>maxUvMovementTexels)maxUvMovementTexels=error;
+      }
+    }
+  }
   return {geometry:result,vertices:active.length,triangles:faces.length/3,
     maxMovement,rmsMovement:Math.sqrt(sumSquaredMovement/Math.max(1,movedCount)),
-    correctedWinding,degenerateDropped,duplicatesDropped};
+    maxUvMovementTexels,correctedWinding,degenerateDropped,duplicatesDropped};
 }
 export function simplifyGeometry(g,target,options={}){
   if(Object.values(g.morphAttributes||{}).some(a=>a?.length))
@@ -180,6 +199,7 @@ export function simplifyGeometry(g,target,options={}){
     const candidate=cluster(g,cell,options);
     if(!candidate.geometry)return;
     if(candidate.triangles>=oldCount || candidate.maxMovement/diagonal>maxMovementRatio ||
+      (options.preserveUV!==false && candidate.maxUvMovementTexels>Math.max(.5,Number(options.maxUvTexels)||4)*1.5) ||
       candidate.correctedWinding>oldCount*.025){
       candidate.geometry.dispose();return;
     }
@@ -205,10 +225,11 @@ export function simplifyGeometry(g,target,options={}){
     if(middle<=above.cell||middle>=below.cell)break;
     evaluate(middle);
   }
-  if(!best)return {reason:'При защите UV и костей сетка не уменьшается: выбери другую модель или настройки.'};
+  if(!best)return {reason:'При защите UV, текстур и костей сетка не уменьшается безопасно. Для уменьшения до 20 000 может потребоваться новая UV-развёртка и запекание текстур, как в Tripo. Исходная модель сохранена.'};
   return {...best,originalTriangles:oldCount,target,attempts,
     targetErrorPercent:Math.round(10000*(best.triangles-target)/target)/100,
     maxMovementPercent:Math.round(best.maxMovement/diagonal*10000)/100,
+    maxUvMovementTexels:Math.round(best.maxUvMovementTexels*100)/100,
     largeMode:isLarge,
     method:'vertex clustering (adaptive target refinement; shape movement capped)'};
 }
