@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {normalizedTop4,simplifyGeometry,closestSegmentDistanceSq,guardSkinToCapsules,getBindCapsules} from './mesh-tools.js';
 
 test('top-four joint weights normalize and keep highest influences',()=>{
@@ -215,4 +216,43 @@ test('curved textured surface keeps measured shape and does not reverse triangle
  assert.ok(rms<.015,'curved surface shape should stay close');
  assert.equal(flipped,0,'triangle winding must not invert');
  out.geometry.dispose();mesh.dispose();
+});
+
+test('optimized skinned character GLB round-trip retains UV, bones and animation',async()=>{
+ // Minimal browser FileReader shim for node: no textures / DOM canvas required.
+ const oldReader=globalThis.FileReader;
+ globalThis.FileReader=class {
+  readAsArrayBuffer(blob){blob.arrayBuffer().then(data=>{this.result=data;this.onloadend?.({target:this})}).catch(error=>{this.error=error;this.onerror?.(error)})}
+  readAsDataURL(blob){blob.arrayBuffer().then(data=>{this.result='data:'+blob.type+';base64,'+Buffer.from(data).toString('base64');this.onloadend?.({target:this})})}
+ };
+ let mesh=null,source=null;
+ try{
+  source=makeGrid(45);
+  const out=simplifyGeometry(source,1500,{preserveUV:true,protectSkin:true});
+  assert.ok(out.geometry,out.reason);
+  const root=new THREE.Group();
+  const hips=new THREE.Bone();hips.name='Hips';hips.position.set(0,0,0);
+  const arm=new THREE.Bone();arm.name='Arm';arm.position.set(.5,.4,0);hips.add(arm);
+  mesh=new THREE.SkinnedMesh(out.geometry,new THREE.MeshStandardMaterial({color:0xffffff}));
+  root.add(mesh);root.add(hips);root.updateMatrixWorld(true);
+  mesh.bind(new THREE.Skeleton([hips,arm]));
+  const clip=new THREE.AnimationClip('walk',1,[
+   new THREE.QuaternionKeyframeTrack(arm.name+'.quaternion',[0,1],[0,0,0,1,0,.2,0,.9797959])
+  ]);
+  const output=await new GLTFExporter().parseAsync(root,{binary:true,trs:true,animations:[clip]});
+  assert.ok(output instanceof ArrayBuffer,'export GLB binary');
+  const view=new DataView(output);
+  assert.equal(view.getUint32(0,true),0x46546c67);
+  assert.equal(view.getUint32(8,true),output.byteLength);
+  const jsonChunkBytes=view.getUint32(12,true);
+  const json=JSON.parse(new TextDecoder().decode(new Uint8Array(output,20,jsonChunkBytes)).trim());
+  assert.ok(json.skins?.length,'skin and inverse bind matrices present');
+  assert.ok(json.animations?.length,'animation clip present');
+  const attributes=json.meshes?.[0]?.primitives?.[0]?.attributes||{};
+  for(const attr of ['POSITION','NORMAL','TEXCOORD_0','JOINTS_0','WEIGHTS_0'])
+    assert.ok(attributes[attr]!==undefined,attr+' attribute must be exported');
+ }finally{
+  if(mesh){mesh.geometry.dispose();mesh.material.dispose();}
+  source?.dispose();globalThis.FileReader=oldReader;
+ }
 });
