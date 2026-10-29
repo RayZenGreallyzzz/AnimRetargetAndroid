@@ -59,7 +59,15 @@
       border:"1px solid #e58d4d",borderRadius:"7px",background:"#246643",
       color:"#fff",padding:"6px 8px",marginLeft:"4px",minHeight:"32px"
     });
-    nextButton.onclick=()=>{if(!getActive())return warn("Сначала импортируй GLB");bridge.openTool("rig");};
+    nextButton.onclick=async()=>{
+      if(typeof window.PhoenixOptimizeCommit==="function"){
+        nextButton.disabled=true;
+        try{await window.PhoenixOptimizeCommit()}
+        finally{nextButton.disabled=false}
+        return;
+      }
+      warn("Сначала открой модель в Optimize и сохрани результат.");
+    };
     holder.append(note,syncButton,nextButton);
     document.body.appendChild(holder);
     status = holder;
