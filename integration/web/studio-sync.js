@@ -167,7 +167,9 @@
     if (!input || input.id !== modelInput) return;
     // Synthetic events are generated when the shared model is imported by suite.
     // Publishing those again would cause an infinite sync revision loop.
-    if (!event.isTrusted) return;
+    if (input.dataset.phoenixWorkspaceImport==="1") return;
+    // Original Rig may dispatch a synthetic change after Android file pick.
+    // Accept it, but never loop on files imported by the shared workspace.
     const file = input.files && input.files[0];
     if (!file || handledFiles.has(file)) return;
     handledFiles.add(file);
