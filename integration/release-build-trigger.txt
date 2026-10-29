@@ -31,3 +31,5 @@ Final Islands package isolation: build installation suffix .suiteislands, keepin
 2026-10-29 Forge Retarget Sync: take the current GLB directly from private phoenix_workspace into original MainActivity without SAF; preserve FBX+GLB import paths. Optimizer honors pcsClothMask from Character; separate application ID .suitertsync to protect older test installs. Python tests and Android CI required.
 
 2026-10-29 QA hotfix: full vertex/index cloth-mask hash v2 in Character and Optimizer, block stale masks, regression tests 1001-vertex hidden edit and malformed positions; preserve direct Retarget private handoff. Build separate signed APK for regression testing; older masks v1 require repaint.
+
+2026-10-29 QA2 signed APK release: unique applicationIdSuffix .suiteqav2 prevents debug signature collision with prior .suitertsync; include mask v2 signatures and direct Retarget handoff. No automatic migration of old private-workspace files.
