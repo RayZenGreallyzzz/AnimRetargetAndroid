@@ -58,4 +58,10 @@ test('one GLB imported to Optimize is shared and auto-opened in Rig without repi
  rig.docEvents.change({target:rig.input,isTrusted:false});
  await wait();
  assert.equal(native.getActive().revision,1);
+ // Third independent editor also loads the same current character automatically.
+ const character=mountEditor('character',native);
+ character.fireReady();await wait();
+ assert.equal(character.loadCalls.length,1);
+ assert.equal(character.loadCalls[0].name,'woman.glb');
+ assert.equal(character.loadCalls[0].inputId,'base-file');
 });
