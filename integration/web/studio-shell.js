@@ -59,7 +59,7 @@
     const files = (() => {try {return JSON.parse(call("listFiles") || "[]")} catch {return []}})();
     const targets = chosenInputs();
     panel.innerHTML = '<h3>Файлы Phoenix Character Forge</h3>'
-     +'<p>Экспортированные модели хранятся во внутреннем хранилище приложения. Выбери файл и импортируй его в активный редактор. Для Retarget сохрани файл через «Поделиться в файлы» и выбери его обычным импортом.</p>'
+     +'<p>Экспортированные модели хранятся во внутреннем хранилище приложения. Выбери файл и импортируй его в активный редактор. Для Retarget нажми вкладку «Ретаргетинг» → «Открыть с персонажем».</p>'
      +'<label>Куда загрузить: <select id="phoenix-target">'+targets.map(t =>'<option value="'+t.id+'">'+escapeHTML(t.label)+'</option>').join("")+'</select></label>'
      + '<div id="phoenix-files"></div><div class="footer"><button id="phoenix-close">Закрыть</button></div>';
     const listing = panel.querySelector("#phoenix-files");
@@ -154,6 +154,10 @@
     const workspace=document.createElement("button");workspace.type="button";
     workspace.textContent="📁 Общие GLB"; workspace.onclick=showPanel;
     tabs.append(workspace);
+    const memory=document.createElement("button");memory.type="button";
+    memory.textContent="🧹 Память"; memory.title="Освободить RAM, закрыв неактивные вкладки после подтверждения";
+    memory.onclick=()=>call("releaseHiddenEditors");
+    tabs.append(memory);
     host.append(tabs);
   }
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",buildTabs,{once:true}); else buildTabs();
