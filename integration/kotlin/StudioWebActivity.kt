@@ -294,9 +294,9 @@ class StudioWebActivity : Activity() {
             openTool("rig")
         } else if(selected == "rig") {
             openTool("optimize")
-        } else if (views["rig"]?.canGoBack() == true) {
-            views["rig"]?.goBack()
         } else {
+            // Optimize is the first step. Back must never navigate the
+            // invisible Rig WebView (which might contain unsaved edits).
             super.onBackPressed()
         }
     }
