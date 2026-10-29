@@ -5,6 +5,11 @@
 (function(){
  'use strict';
  const state={breast:true,tail:false,wings:false,ears:false,height:0,depth:0,width:0,revision:0};
+ try{
+   const saved=JSON.parse(window.localStorage.getItem('phoenixWomanChestOffsetsV1')||'{}');
+   for(const key of ['height','depth','width'])
+     if(Number.isFinite(saved[key]))state[key]=Math.max(key==='width'?-0.08:-0.12,Math.min(key==='width'?0.08:0.12,saved[key]));
+ }catch(_){} // Still usable when WebView storage was cleared.
  const order=['breast','tail','wings','ears'];
  const path=()=> 'rigs/rig-woman-'+order.map(k=>state[k]?'1':'0').join('')+'.glb';
  const file=()=>path()+'?phoenixChest='+state.revision;
@@ -65,6 +70,9 @@
    const ids=[['height','height'],['depth','depth'],['width','width']];
    for(const [id,key] of ids){
      const el=document.getElementById('phoenix-breast-'+id);
+     el.value=String(state[key]);
+     document.getElementById('phoenix-breast-'+id+'-value').textContent=
+       (state[key]>0?'+':'')+Math.round(state[key]*1000)/10+' см';
      el.addEventListener('input',()=>{
        const value=Number(el.value);
        document.getElementById('phoenix-breast-'+id+'-value').textContent=
@@ -79,6 +87,7 @@
      }
      if(!window.confirm('Перезагрузить скелет Woman с новым положением груди? Несохранённые правки костей и весов могут потеряться.'))return;
      for(const [id,key] of ids)state[key]=Number(document.getElementById('phoenix-breast-'+id).value);
+     try{window.localStorage.setItem('phoenixWomanChestOffsetsV1',JSON.stringify({height:state.height,depth:state.depth,width:state.width}));}catch(_){}
      state.revision++;
      profile.dispatchEvent(new Event('change',{bubbles:true}));
      document.getElementById('phoenix-woman-adjust-status').textContent='Положение применено к шаблону Woman. Проверь ориентацию костей в рентгене.';
