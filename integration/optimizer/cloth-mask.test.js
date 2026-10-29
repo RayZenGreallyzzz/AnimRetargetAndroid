@@ -51,3 +51,13 @@ test('old v1 cloth masks are blocked rather than applied on wrong vertex topolog
  assert.match(readClothProtection(m).reason,/устарела/);
  m.geometry.dispose();m.material.dispose();
 });
+
+test('malformed NaN coordinate fails closed without throwing from Optimizer UI',()=>{
+ const m=makeMesh();
+ m.userData.pcsClothMask={type:'phoenix-cloth-guard-v2',vertices:4,signature:geometrySignature(m.geometry),runs:[[0,1]]};
+ m.geometry.getAttribute('position').setX(1,NaN);
+ const result=readClothProtection(m);
+ assert.equal(result.mask,null);
+ assert.match(result.reason,/Некорректная геометрия/);
+ m.geometry.dispose();m.material.dispose();
+});
