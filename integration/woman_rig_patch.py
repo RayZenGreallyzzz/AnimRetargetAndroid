@@ -51,7 +51,7 @@ def patch_page(path):
     s=path.read_text('utf8')
     marker='<!-- Hand skeleton options for human skeleton -->'
     s=replace_once(s,marker,WOMAN_PANEL+'\n'+marker)
-    s=replace_once(s,'</head>','<script src="./phoenix-woman-rig-transform.js"></script>\\n<script src="./phoenix-woman-ui.js"></script>\\n</head>')
+    s=replace_once(s,'</head>','<script src="./phoenix-woman-rig-transform.js"></script>\n<script src="./phoenix-woman-ui.js"></script>\n</head>')
     path.write_text(s,'utf8')
 
 def apply(staged_rig):
