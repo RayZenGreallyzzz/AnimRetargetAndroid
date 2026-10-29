@@ -25,7 +25,7 @@ const ui=[
 '<label class="toggle"><input id="wireframe" type="checkbox"/> Показывать сетку поверх модели</label>',
 '<div class="buttons"><button id="simplify" class="primary">Предпросмотр удаления вершин</button><button id="undo">Отменить предпросмотр</button></div>',
 '<button id="compare" disabled>Сравнить: ДО / ПОСЛЕ</button>',
-'<p>Это осторожное объединение вершин, а не полная ретопология Tripo. Morph-меши и сложные материалы пропускаются. Целевой бюджет не гарантирован.</p>',
+'<p>Проверка UV учитывает размер текстуры и KHR_texture_transform. Цель 20 000 для сложного атласа может быть недостижима без перепекания текстур. Это кластеризация, а не полноценная ретопология Tripo.</p>',
 '<h3>02 / Объёмы костей и одежда</h3>',
 '<label>Кость<select id="bones"></select></label>',
 '<label>Радиус капсул: <span id="radius-value">1.00</span>×<input id="radius" type="range" min=".4" max="2.8" step=".1" value="1"/></label>',
@@ -61,6 +61,26 @@ scene.add(capsuleGroup);
 const msg=s=>{$('status').textContent=s;};
 const fmt=n=>Number(n).toLocaleString('ru-RU');
 function selected(){return meshes[Number($('meshes').value)]?.node||null;}
+function textureSafety(mesh){
+ // Use effective texture resolution AFTER KHR_texture_transform repeat.
+ // The user's gltfpack WebP atlas has UV 0..1/16 and texture.repeat≈16.
+ let textureSize=2048,uvRepeat=1;
+ const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+ for(const material of materials){
+  if(!material)continue;
+  for(const name of ['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap']){
+   const texture=material[name];
+   if(!texture)continue;
+   const src=texture.image||texture.source?.data;
+   const longest=Math.max(Number(src?.width)||0,Number(src?.height)||0);
+   if(longest>0)textureSize=Math.max(textureSize,longest);
+   uvRepeat=Math.max(uvRepeat,
+    Math.abs(Number(texture.repeat?.x)||1),Math.abs(Number(texture.repeat?.y)||1));
+  }
+ }
+ return {textureSize,uvRepeat,maxUvTexels:4};
+}
+
 function selectedStats(){
   if(!character)return $('stats').textContent='Нет модели';
   const d=describe(character),m=selected();
@@ -268,7 +288,8 @@ $('simplify').onclick=async()=>{
   let job=null;
   try{
     job=optimizeInBackground(mesh.geometry,target,{
-      preserveUV:$('uv').checked,protectSkin:$('joint').checked
+      preserveUV:$('uv').checked,protectSkin:$('joint').checked,
+      ...textureSafety(mesh)
     },(attempt,total)=>{
       msg('Оптимизация меша: проход '+attempt+' из примерно '+total+
         ' · '+fmt(existing)+' △ · цель '+fmt(target)+' △. Можно отменить.');
@@ -286,7 +307,8 @@ $('simplify').onclick=async()=>{
     msg('Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
       ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+
-      '%; макс. сдвиг вершин '+result.maxMovementPercent+'% диагонали.'+
+      '%; макс. сдвиг вершин '+result.maxMovementPercent+'% диагонали, UV до '+
+      result.maxUvMovementTexels+' пикселей.'+
       (Math.abs(result.targetErrorPercent)>15?' ВНИМАНИЕ: цель достигнута неточно, проверь результат.':'')+
       ' Исходник сохранён; нажми «Применить» или «Отменить».');
   }catch(e){
