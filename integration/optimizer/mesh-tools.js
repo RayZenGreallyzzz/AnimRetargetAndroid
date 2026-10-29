@@ -119,20 +119,46 @@ export function simplifyGeometry(g,target,options={}){
   g.computeBoundingBox();const size=g.boundingBox.getSize(new THREE.Vector3());
   const dim=Math.max(size.x,size.y,size.z);
   if(!Number.isFinite(dim)||dim<=0)return {reason:'Неправильный размер меша.'};
-  let best=null;
-  const trials=options.trials||10;
-  for(let i=0;i<trials;i++){
-    const ratio=i/(trials-1),cell=(dim/2500)*Math.pow(2500/3,ratio);
+
+  // Coarse logarithmic search establishes a bracket around the requested
+  // triangle budget. Vertex clustering has discrete jumps: returning only
+  // coarse 10 samples routinely oversimplifies by 2–3x (198450 -> 7938).
+  // Refine the bracket without changing UV/skin/normals protection options.
+  let best=null,below=null,above=null,attempts=0;
+  const trials=Math.max(3,Math.min(24,Math.round(options.trials||10)));
+  const refinements=Math.max(0,Math.min(12,Math.round(options.refinements??7)));
+  const lower=dim/2500,upper=dim/3;
+  const evaluate=cell=>{
+    attempts++;
     const candidate=cluster(g,cell,options);
-    if(candidate.geometry && candidate.triangles<oldCount){
-      if(!best||Math.abs(candidate.triangles-target)<Math.abs(best.triangles-target)){
-        best?.geometry.dispose();best=candidate;
-      }else candidate.geometry.dispose();
-      if(best.triangles<=target&&best.triangles>=target*.82)break;
+    if(!candidate.geometry)return;
+    if(candidate.triangles>=oldCount){candidate.geometry.dispose();return;}
+    const score=Math.abs(candidate.triangles-target);
+    if(!best||score<Math.abs(best.triangles-target)){
+      best?.geometry.dispose();best={...candidate,cellSize:cell};
+    }else candidate.geometry.dispose();
+    if(candidate.triangles>=target){
+      // The closest high-count result must use the largest known small cell.
+      if(!above||cell>above.cell)above={cell,triangles:candidate.triangles};
+    }else {
+      // The closest low-count result must use the smallest known large cell.
+      if(!below||cell<below.cell)below={cell,triangles:candidate.triangles};
     }
+  };
+  for(let i=0;i<trials;i++){
+    const ratio=i/(trials-1);
+    evaluate(lower*Math.pow(upper/lower,ratio));
+  }
+  for(let i=0;i<refinements&&above&&below&&above.cell<below.cell;i++){
+    if(best&&Math.abs(best.triangles-target)<=target*.025)break;
+    const middle=Math.sqrt(above.cell*below.cell);
+    if(middle<=above.cell||middle>=below.cell)break;
+    evaluate(middle);
   }
   if(!best)return {reason:'При защите UV и костей сетка не уменьшается: выбери другую модель или настройки.'};
-  return {...best,originalTriangles:oldCount,target,method:'vertex clustering'};
+  return {...best,originalTriangles:oldCount,target,attempts,
+    targetErrorPercent:Math.round(10000*(best.triangles-target)/target)/100,
+    method:'vertex clustering (adaptive target refinement)'};
 }
 export function closestSegmentDistanceSq(p,a,b){
   const ab=b.clone().sub(a),d=ab.lengthSq();
