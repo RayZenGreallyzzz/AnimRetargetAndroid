@@ -74,6 +74,7 @@ jobs:
           grep -q 'id="cloth-paint-toggle"' src/main.js
           grep -q 'id="body-surface"' src/main.js
           grep -q 'id="body-skin"' src/main.js
+          grep -q 'id="character-next"' src/main.js
           npm run build -- --base=./
           test -s dist/index.html
 
