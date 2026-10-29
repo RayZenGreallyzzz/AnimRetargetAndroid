@@ -59,3 +59,30 @@ test('worker can be cancelled before changing original model',async()=>{
   assert.equal(src.index.count,150*150*6);
  }finally{src.dispose();globalThis.Worker=nativeWorker}
 });
+
+test('gltfpack-style stride8 POSITION and stride4 normalized NORMAL round-trip through worker',async()=>{
+ globalThis.Worker=NodeBrowserWorker;
+ const g=makeMesh(46),n=g.getAttribute('position').count;
+ const quantPos=new Uint16Array(n*4),quantNorm=new Int8Array(n*4);
+ for(let i=0;i<n;i++){
+  quantPos[i*4]=Math.round(g.getAttribute('position').getX(i)*13000);
+  quantPos[i*4+1]=Math.round(g.getAttribute('position').getY(i)*16000);
+  quantPos[i*4+2]=0;quantPos[i*4+3]=0;
+  quantNorm[i*4]=0;quantNorm[i*4+1]=0;quantNorm[i*4+2]=127;quantNorm[i*4+3]=0;
+ }
+ g.setAttribute('position',new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(quantPos,4),3,0,false));
+ g.setAttribute('normal',new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(quantNorm,4),3,0,true));
+ try{
+  const job=optimizeInBackground(g,1200,{preserveUV:false,protectSkin:true});
+  const result=await job.promise;
+  assert.ok(result.geometry,result.reason);
+  assert.ok(result.triangles<46*46*2);
+  const pos=result.geometry.getAttribute('position'),normal=result.geometry.getAttribute('normal');
+  assert.equal(pos.array.constructor,Float32Array);
+  assert.ok(Math.max(pos.getX(0),pos.getX(pos.count-1))>1000);
+  assert.ok(normal.getZ(0)>.98 && normal.getZ(0)<=1);
+  assert.equal(normal.normalized,false);
+  assert.ok(result.geometry.getAttribute('uv'));
+  result.geometry.dispose();
+ }finally{g.dispose();globalThis.Worker=nativeWorker}
+});
