@@ -43,3 +43,5 @@ Final Islands package isolation: build installation suffix .suiteislands, keepin
 2026-10-30 Shared Flow QA4 verified slider persistence + browser fetch GLB adjustment test, single-import sync regression, one-click save to Rig and Retarget. Build from latest integration SHA with independent app package .suiteflowqa4; do not replace user's existing rig apps.
 
 2026-10-30 Heavy Mesh QA5 screenshot fix: no arbitrary 260000 triangle input or algorithm limit; cancellable module WebWorker receives transferrable geometry, holds source intact and shows passes; memory-estimate safety on 4GB Android; target applies per selected mesh; regression 273800→18050 for 20000 target with UV+skin preserved, 19/19 optimizer tests; isolated .suitebigqa5 build.
+
+2026-10-30 Original red-haired girl gltfpack analysis: 1,036,252 triangles, 563,288 vertices, one non-skinned mesh, three 2048 WebP textures, no bones/clips/morphs, one atlas UV remapped ×16; source file remains private (never uploaded to GitHub). Fix gltfpack InterleavedBufferAttribute in worker, strict texture-texel UV protection, no false Tripo equivalence, separate QA6 .suitetripoqa6 package.
