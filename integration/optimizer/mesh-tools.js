@@ -53,7 +53,9 @@ function cluster(g,cell,options={}){
   if(!pos)return {reason:'Нет POSITION.'};
   if(!!attrs.skinIndex!==!!attrs.skinWeight)return {reason:'Некорректные skin weights.'};
   const count=pos.count,uv=attrs.uv;
-  const index=g.index,source=index?Array.from(index.array):Array.from({length:count},(_,i)=>i);
+  // Avoid copying huge index buffers into an Array<number> (~8 bytes/entry).
+  // Keep the original typed index view and generate sequential indices on demand.
+  const index=g.index,source=index?.array||null,sourceLength=index?.count??count;
   const map=new Map(),buckets=[],oldToNew=new Int32Array(count);
   const uvCell=Math.max(.005,cell*.1);
   for(let i=0;i<count;i++){
@@ -77,8 +79,8 @@ function cluster(g,cell,options={}){
     return [uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx];
   }
   const faces=[],seenFaces=new Set();let correctedWinding=0,degenerateDropped=0,duplicatesDropped=0;
-  for(let k=0;k+2<source.length;k+=3){
-    const ia=source[k],ib=source[k+1],ic=source[k+2];
+  for(let k=0;k+2<sourceLength;k+=3){
+    const ia=source?source[k]:k,ib=source?source[k+1]:k+1,ic=source?source[k+2]:k+2;
     let a=oldToNew[ia],b=oldToNew[ib],c=oldToNew[ic];
     if(a===b||a===c||b===c)continue;
     const centerA=centers[a],centerB=centers[b],centerC=centers[c];
@@ -154,7 +156,9 @@ export function simplifyGeometry(g,target,options={}){
   if(!pos)return {reason:'Нет атрибута POSITION.'};
   const oldCount=Math.floor((g.index?.count||pos.count)/3);
   if(!Number.isFinite(target)||target<64||target>=oldCount)return {reason:'Цель должна быть меньше исходного количества (мин. 64).'};
-  if(oldCount>260000)return {reason:'Слишком крупный меш для безопасной обработки на планшете.'};
+  // Large geometry is handled by the same safety-preserving algorithm, but
+  // with fewer expensive candidate passes in a background Worker. A fixed
+  // polygon-count restriction was incorrect (large GLBs are valid).
   g.computeBoundingBox();const size=g.boundingBox.getSize(new THREE.Vector3());
   const dim=Math.max(size.x,size.y,size.z);
   if(!Number.isFinite(dim)||dim<=0)return {reason:'Неправильный размер меша.'};
@@ -166,11 +170,13 @@ export function simplifyGeometry(g,target,options={}){
   // coarse 10 samples routinely oversimplifies by 2–3x (198450 -> 7938).
   // Refine the bracket without changing UV/skin/normals protection options.
   let best=null,below=null,above=null,attempts=0;
-  const trials=Math.max(3,Math.min(24,Math.round(options.trials||10)));
-  const refinements=Math.max(0,Math.min(12,Math.round(options.refinements??7)));
+  const isLarge=oldCount>260000;
+  const trials=Math.max(3,Math.min(24,Math.round(options.trials??(isLarge?5:10))));
+  const refinements=Math.max(0,Math.min(12,Math.round(options.refinements??(isLarge?4:7))));
   const lower=dim/2500,upper=dim/3;
   const evaluate=cell=>{
     attempts++;
+    if(typeof options.onProgress==='function')options.onProgress(attempts,trials+refinements);
     const candidate=cluster(g,cell,options);
     if(!candidate.geometry)return;
     if(candidate.triangles>=oldCount || candidate.maxMovement/diagonal>maxMovementRatio ||
@@ -203,6 +209,7 @@ export function simplifyGeometry(g,target,options={}){
   return {...best,originalTriangles:oldCount,target,attempts,
     targetErrorPercent:Math.round(10000*(best.triangles-target)/target)/100,
     maxMovementPercent:Math.round(best.maxMovement/diagonal*10000)/100,
+    largeMode:isLarge,
     method:'vertex clustering (adaptive target refinement; shape movement capped)'};
 }
 export function closestSegmentDistanceSq(p,a,b){
