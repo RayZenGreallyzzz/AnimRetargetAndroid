@@ -123,7 +123,11 @@
     const transfer=new DataTransfer();
     transfer.items.add(file);
     target.files=transfer.files;
-    target.dispatchEvent(new Event("change",{bubbles:true}));
+    // Mark the synthetic workspace load so the receiving editor does not
+    // publish it again and create an endless GLB revision loop.
+    target.dataset.phoenixWorkspaceImport="1";
+    try{target.dispatchEvent(new Event("change",{bubbles:true}))}
+    finally{delete target.dataset.phoenixWorkspaceImport;}
     toast("Загружено в "+({rig:"Rig",character:"Character",optimize:"Optimize"}[tool]||tool)+": "+name);
   }
   function buildTabs() {
