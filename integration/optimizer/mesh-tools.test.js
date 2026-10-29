@@ -150,3 +150,23 @@ test('no plausible capsule does not silently bind cloth to arbitrary bone',()=>{
   assert.equal(output.geometry.getAttribute('skinIndex').getX(0),0);
   output.geometry.dispose();g.dispose();
 });
+
+test('capsule repair never changes painted clothing weights or joint assignments',()=>{
+ const g=makeGrid(8),count=g.getAttribute('position').count;
+ const originalJ=Array.from(g.getAttribute('skinIndex').array), originalW=Array.from(g.getAttribute('skinWeight').array);
+ const protect=new Uint8Array(count);for(let i=0;i<count;i++)if(i%3===0)protect[i]=1;
+ const c=[
+  {index:0,start:new THREE.Vector3(0,0,0),end:new THREE.Vector3(0,1,0),radius:.22},
+  {index:1,start:new THREE.Vector3(1,0,0),end:new THREE.Vector3(1,1,0),radius:.22}
+ ];
+ const out=guardSkinToCapsules(g,c,{allowReassign:true,protectedVertices:protect});
+ assert.ok(out.geometry,out.reason);assert.equal(out.protectedCount,protect.reduce((a,b)=>a+b,0));
+ const j=out.geometry.getAttribute('skinIndex').array,w=out.geometry.getAttribute('skinWeight').array;
+ for(let i=0;i<count;i++)if(protect[i])for(let k=0;k<4;k++){
+  assert.equal(j[i*4+k],originalJ[i*4+k], 'cloth joint must not change');
+  assert.equal(w[i*4+k],originalW[i*4+k], 'cloth weight must not change');
+ }
+ const invalid=guardSkinToCapsules(g,c,{protectedVertices:new Uint8Array(3)});
+ assert.match(invalid.reason,/не совпадает/);
+ out.geometry.dispose();g.dispose();
+});
