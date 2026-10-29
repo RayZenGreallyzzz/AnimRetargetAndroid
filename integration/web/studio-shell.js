@@ -200,5 +200,12 @@
   },true);
   // The separate synchronization layer uses the same safe chunked file loader.
   // It must not replace or mutate the original Rig or Character editor engines.
-  window.PhoenixSuite = Object.freeze({useWorkspaceFile, toast, tool});
+  async function saveBlob(blob,name) {
+    if(!(blob instanceof Blob)||blob.size<=0)throw Error("Пустой файл модели");
+    if(!/\.glb$/i.test(name))throw Error("Передача персонажа поддерживает только GLB");
+    const url=URL.createObjectURL(blob);
+    try{return await persistBlob(url,name)}
+    finally{URL.revokeObjectURL(url)}
+  }
+  window.PhoenixSuite = Object.freeze({useWorkspaceFile,saveBlob,toast,tool});
 })();
