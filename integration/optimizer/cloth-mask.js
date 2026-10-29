@@ -29,8 +29,11 @@ export function readClothProtection(mesh){
  const saved=mesh?.userData?.pcsClothMask;
  if(!saved)return {mask:null,count:0,hasMask:false,reason:null};
  const pos=mesh?.geometry?.getAttribute?.('position');
+ let signature='';
+ try {signature=geometrySignature(mesh.geometry);}
+ catch(error){return {mask:null,count:0,hasMask:true,reason:'Некорректная геометрия: '+error.message+'. Веса не менялись.'};}
  if(!pos || saved.type!=='phoenix-cloth-guard-v2' || saved.vertices!==pos.count||
-    saved.signature!==geometrySignature(mesh.geometry) || !Array.isArray(saved.runs))
+    saved.signature!==signature || !Array.isArray(saved.runs))
   return {mask:null,count:0,hasMask:true,reason:'Маска одежды устарела или несовместима с геометрией. Проверь и заново нарисуй защиту в Character. Изменение весов заблокировано.'};
  const mask=new Uint8Array(pos.count);let before=0,total=0;
  for(const item of saved.runs) {
