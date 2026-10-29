@@ -170,3 +170,22 @@ test('capsule repair never changes painted clothing weights or joint assignments
  assert.match(invalid.reason,/не совпадает/);
  out.geometry.dispose();g.dispose();
 });
+
+test('Tripo-scale diagnostic: ~198k source triangles towards 20k with UV, skin and normals',()=>{
+ const mesh=makeGrid(315),goal=20000,source=mesh.index.count/3;
+ const start=Date.now();
+ const out=simplifyGeometry(mesh,goal,{preserveUV:true,protectSkin:true,trials:10});
+ const elapsed=Date.now()-start;
+ console.log('TRIPO_SCALE_BENCHMARK',JSON.stringify({source,target:goal,achieved:out.triangles||0,vertices:out.vertices||0,elapsedMs:elapsed,reason:out.reason||null,ratio:out.triangles?out.triangles/source:null}));
+ assert.ok(out.geometry,out.reason);
+ assert.ok(out.triangles<source,'algorithm must actually remove triangles');
+ assert.ok(out.geometry.getAttribute('uv'),'UV must survive');
+ assert.ok(out.geometry.getAttribute('skinWeight'),'skin weights must survive');
+ assert.ok(out.geometry.getAttribute('normal'),'normals must survive');
+ for(let v=0;v<out.geometry.getAttribute('skinWeight').count;v++){
+  const w=out.geometry.getAttribute('skinWeight');
+  let sum=0;for(let k=0;k<4;k++)sum+=w.getComponent(v,k);
+  assert.ok(Math.abs(sum-1)<1e-4,'every output vertex is fully normalized');
+ }
+ out.geometry.dispose();mesh.dispose();
+});
