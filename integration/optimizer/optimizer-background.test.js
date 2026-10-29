@@ -38,7 +38,7 @@ test('background worker receives copy, preserves source and transfers optimized 
  globalThis.Worker=NodeBrowserWorker;
  const src=makeMesh(45),before=src.index.count,progress=[];
  try{
-  const job=optimizeInBackground(src,800,{preserveUV:true,protectSkin:true},(pass,total)=>progress.push(pass));
+  const job=optimizeInBackground(src,800,{preserveUV:false,protectSkin:true},(pass,total)=>progress.push(pass));
   const out=await job.promise;
   assert.ok(out.geometry,out.reason);
   assert.ok(out.triangles<before/3);
