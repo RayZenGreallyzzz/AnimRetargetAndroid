@@ -104,7 +104,21 @@ function cluster(g,cell,options={}){
   if(g.groups.length===1)result.addGroup(0,indices.length,g.groups[0].materialIndex);
   if(!result.getAttribute('normal'))result.computeVertexNormals();
   result.computeBoundingBox();result.computeBoundingSphere();
-  return {geometry:result,vertices:active.length,triangles:faces.length/3};
+  // Quantify the worst original-vertex movement created by clustering;
+  // refuse an aggressive target rather than silently crushing the model.
+  let maxMovement=0,sumSquaredMovement=0,movedCount=0;
+  const finalPos=result.getAttribute('position');
+  for(let i=0;i<active.length;i++){
+    const bucket=active[i],xx=finalPos.getX(i),yy=finalPos.getY(i),zz=finalPos.getZ(i);
+    for(const vi of bucket){
+      const dx=xx-pos.getX(vi),dy=yy-pos.getY(vi),dz=zz-pos.getZ(vi);
+      const squared=dx*dx+dy*dy+dz*dz;
+      maxMovement=Math.max(maxMovement,Math.sqrt(squared));
+      sumSquaredMovement+=squared;movedCount++;
+    }
+  }
+  return {geometry:result,vertices:active.length,triangles:faces.length/3,
+    maxMovement,rmsMovement:Math.sqrt(sumSquaredMovement/Math.max(1,movedCount))};
 }
 export function simplifyGeometry(g,target,options={}){
   if(Object.values(g.morphAttributes||{}).some(a=>a?.length))
@@ -119,6 +133,8 @@ export function simplifyGeometry(g,target,options={}){
   g.computeBoundingBox();const size=g.boundingBox.getSize(new THREE.Vector3());
   const dim=Math.max(size.x,size.y,size.z);
   if(!Number.isFinite(dim)||dim<=0)return {reason:'Неправильный размер меша.'};
+  const diagonal=Math.max(size.length(),1e-8);
+  const maxMovementRatio=Math.max(.002,Math.min(.15,Number(options.maxMovementRatio??.035)));
 
   // Coarse logarithmic search establishes a bracket around the requested
   // triangle budget. Vertex clustering has discrete jumps: returning only
@@ -132,7 +148,9 @@ export function simplifyGeometry(g,target,options={}){
     attempts++;
     const candidate=cluster(g,cell,options);
     if(!candidate.geometry)return;
-    if(candidate.triangles>=oldCount){candidate.geometry.dispose();return;}
+    if(candidate.triangles>=oldCount || candidate.maxMovement/diagonal>maxMovementRatio){
+      candidate.geometry.dispose();return;
+    }
     const score=Math.abs(candidate.triangles-target);
     if(!best||score<Math.abs(best.triangles-target)){
       best?.geometry.dispose();best={...candidate,cellSize:cell};
@@ -158,7 +176,8 @@ export function simplifyGeometry(g,target,options={}){
   if(!best)return {reason:'При защите UV и костей сетка не уменьшается: выбери другую модель или настройки.'};
   return {...best,originalTriangles:oldCount,target,attempts,
     targetErrorPercent:Math.round(10000*(best.triangles-target)/target)/100,
-    method:'vertex clustering (adaptive target refinement)'};
+    maxMovementPercent:Math.round(best.maxMovement/diagonal*10000)/100,
+    method:'vertex clustering (adaptive target refinement; shape movement capped)'};
 }
 export function closestSegmentDistanceSq(p,a,b){
   const ab=b.clone().sub(a),d=ab.lengthSq();
