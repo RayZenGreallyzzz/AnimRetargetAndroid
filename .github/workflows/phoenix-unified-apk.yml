@@ -116,6 +116,9 @@ jobs:
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/phoenix-woman-ui.js
           grep -q 'phoenix-woman-bone-options' AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
           python3 integration/woman_profile_verify.py AnimRetargetAndroid/app/src/main/assets/studio/rig
+          node --check integration/web/phoenix-woman-ui.js
+          node --check integration/web/phoenix-woman-rig-transform.js
+          PHOENIX_RIG_DIR=AnimRetargetAndroid/app/src/main/assets/studio/rig/rigs node --test integration/tests/woman_rig_transform.test.cjs
 
       - name: Isolate the surface-islands test build from all previous Android installs
         shell: bash
