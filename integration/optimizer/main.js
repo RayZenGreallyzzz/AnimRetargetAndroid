@@ -4,6 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {describe,simplifyGeometry,getBindCapsules,guardSkinToCapsules} from './mesh-tools.js';
+import {readClothProtection} from './cloth-mask.js';
 import './style.css';
 
 const $=id=>document.getElementById(id);
@@ -29,7 +30,7 @@ const ui=[
 '<label class="toggle"><input id="weightmap" type="checkbox"/> Отмечать вершины с весом выбранной кости</label>',
 '<label class="toggle"><input id="reassign" type="checkbox"/> Исправить совсем чужие кости на одежде (осторожно)</label>',
 '<div class="buttons"><button id="guard">Предпросмотр защиты весов</button><button id="apply" class="primary">Применить</button></div>',
-'<p>Радиусы капсул рассчитываются по вершинам в BindPose, отдельно для каждого меша. Вес плавно уменьшается за пределами капсулы. Исправление чужих костей выключено по умолчанию. Проверяй плечи, грудь и сгибы.</p>',
+'<p>Радиусы капсул рассчитываются в BindPose. Если на меше есть маска защиты одежды из Character, отмеченные вершины никогда не меняют веса. Повреждённая маска блокирует коррекцию. Исправление чужих костей выключено по умолчанию.</p>',
 '<h3>03 / Результат</h3><div id="status"></div>',
 '<div class="buttons"><button id="export" class="primary">Экспорт отдельного GLB</button><button id="reset">Восстановить исходник</button></div>',
 '<p>Сохраняются UV, материалы, привязка и клипы. Не перезаписывай исходную модель до проверки результата.</p>',
@@ -58,10 +59,12 @@ function selected(){return meshes[Number($('meshes').value)]?.node||null;}
 function selectedStats(){
   if(!character)return $('stats').textContent='Нет модели';
   const d=describe(character),m=selected();
+  const protection=m?readClothProtection(m):null;
   $('stats').textContent='Всего: '+fmt(d.vertices)+' вершин / '+fmt(d.triangles)+' треугольников'+
     '\nМешей: '+d.meshes.length+' · анимаций: '+animations.length+
     (m?'\nВыбран: '+(m.name||'Mesh')+' · '+fmt(Math.floor((m.geometry.index?.count||m.geometry.getAttribute('position').count)/3))+
-       ' треугольников · '+(m.isSkinnedMesh?m.skeleton.bones.length+' костей':'без скелета'):'');
+       ' треугольников · '+(m.isSkinnedMesh?m.skeleton.bones.length+' костей':'без скелета'):'')+
+    (protection?.hasMask ? '\nЗащита одежды: '+(protection.reason || fmt(protection.count)+' вершин защищено') : '');
 }
 function clearWire(){
   if(wireOverlay){
@@ -235,6 +238,8 @@ $('compare').onclick=()=>{
 };
 $('simplify').onclick=async()=>{
   const mesh=selected();if(!mesh)return msg('Сначала загрузи GLB.');
+  const cloth=readClothProtection(mesh);
+  if(cloth.hasMask)return msg('У этого меша записана маска защиты одежды. Упрощение изменит индексы вершин и уничтожит соответствие маски. Сначала сними маску в Character либо используй отдельную копию GLB.');
   cancelPending();
   const target=Number($('target').value);
   if(!Number.isInteger(target)||target<64)return msg('Задай целевое число треугольников не менее 64.');
@@ -257,10 +262,12 @@ $('simplify').onclick=async()=>{
 $('guard').onclick=()=>{
   const mesh=selected();
   if(!mesh?.isSkinnedMesh)return msg('Выбери отдельный скинненный меш персонажа или одежды.');
+  const protection=readClothProtection(mesh);
+  if(protection.reason)return msg(protection.reason);
   cancelPending();playing=false;
   setBindPose();
   const result=guardSkinToCapsules(mesh.geometry,getBindCapsules(mesh,Number($('radius').value)),
-    {allowReassign:$('reassign').checked});
+    {allowReassign:$('reassign').checked,protectedVertices:protection.mask});
   if(result.reason)return msg(result.reason);
   pending={mesh,geometry:result.geometry,before:mesh.geometry,type:'защиты весов'};
   mesh.geometry=result.geometry;
@@ -269,6 +276,7 @@ $('guard').onclick=()=>{
   selectedStats();updateCapsules();
   msg('Пробная защита: изменены веса '+fmt(result.changed)+
     ' вершин; потенциально чужие кости: '+fmt(result.outOfCapsule)+
+    '; защищено маской: '+fmt(result.protectedCount)+
     '; переназначено: '+fmt(result.reassigned)+
     '; требуют ручной проверки: '+fmt(result.unresolved)+
     '. Хороший риг Meshy исправлять не нужно. Исходник сохранён.');
