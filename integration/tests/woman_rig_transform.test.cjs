@@ -59,3 +59,26 @@ test('normal Woman rigs without extra breasts pass through without edits',()=>{
  const result=adjust(b,{height:.05});
  assert.deepEqual(Buffer.from(result),b);
 });
+
+test('Woman Rig 7.6 browser fetch hook serves adjusted GLB (not just a changed slider label)',async()=>{
+ const {runInNewContext}=require('node:vm');
+ const controller=fs.readFileSync(__dirname+'/../web/phoenix-woman-ui.js','utf8');
+ const appWindow={
+  PhoenixWomanRigTransform:{adjust},
+  localStorage:{getItem:()=>JSON.stringify({height:-.065,depth:.025,width:.02})},
+  fetch:async()=>new Response(bytes,{status:200,headers:{'content-type':'model/gltf-binary'}})
+ };
+ runInNewContext(controller,{
+  window:appWindow,
+  document:{readyState:'loading',addEventListener(){}},
+  Response,Headers,console,JSON,Math,Number
+ },{filename:'phoenix-woman-ui.js'});
+ const response=await appWindow.fetch('https://appassets.androidplatform.net/assets/studio/rig/rigs/rig-woman-1000.glb?phoenixChest=0');
+ assert.equal(response.status,200);
+ const altered=parse(await response.arrayBuffer());
+ const base=parse(bytes);
+ const before=xyz(world(base.j,'breast_l')),after=xyz(world(altered.j,'breast_l'));
+ assert.ok(Math.hypot(...diff(after,before))>.04,'woman GLB bone really shifted in intercepted loader');
+ const ordinary=await appWindow.fetch('https://appassets.androidplatform.net/assets/studio/rig/animations/other.glb');
+ assert.equal(ordinary.status,200);
+});
