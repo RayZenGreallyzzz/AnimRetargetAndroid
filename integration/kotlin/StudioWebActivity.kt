@@ -97,6 +97,34 @@ class StudioWebActivity : Activity() {
         web.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
     }
 
+    /**
+     * The tablet has limited RAM. Unload inactive WebGL scenes only after
+     * explicit confirmation: in-memory edits in those tabs can be lost.
+     * Current editor stays untouched; shared exported GLBs remain on disk.
+     */
+    fun releaseHiddenEditors() {
+        val hidden = views.filterKeys { it != selected }
+        if (hidden.isEmpty()) {
+            Toast.makeText(this, "Нет скрытых редакторов", Toast.LENGTH_SHORT).show()
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Освободить память планшета?")
+            .setMessage("Закрыть " + hidden.size + " скрытых 3D-редакторов? Несохранённые изменения в них будут потеряны. Сохранённые общие GLB останутся.")
+            .setPositiveButton("Закрыть скрытые") { _, _ ->
+                for ((key, web) in hidden) {
+                    web.onPause()
+                    container.removeView(web)
+                    web.removeJavascriptInterface("PhoenixNative")
+                    web.destroy()
+                    views.remove(key)
+                }
+                Toast.makeText(this, "Скрытые 3D-редакторы закрыты", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
     private fun createEditor(name: String): WebView {
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -316,6 +344,11 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
     fun openTool(tool: String) {
         if (tool !in setOf("rig", "retarget", "character", "optimize")) return
         app.runOnUiThread { app.openTool(tool) }
+    }
+
+    @JavascriptInterface
+    fun releaseHiddenEditors() {
+        app.runOnUiThread { app.releaseHiddenEditors() }
     }
 
     @JavascriptInterface @Synchronized
