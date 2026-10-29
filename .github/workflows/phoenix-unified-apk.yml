@@ -88,6 +88,8 @@ jobs:
       - name: Test unified tabs and manifest injector
         run: |
           node --check integration/web/studio-shell.js
+          node --check integration/web/studio-sync.js
+          node --test integration/tests/flow-sync.test.cjs
           python3 -m unittest discover -s integration/tests -v
 
       - name: Verify and extract original Anim Retarget Kotlin sources
