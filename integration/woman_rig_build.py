@@ -141,7 +141,7 @@ def new_woman(original,flags):
     added_bind_matrices=[]
     if flags[0]=='1':
         for side,sign in [('l',1),('r',-1)]:
-            p=target(spine,sign,.135,.043,.11)
+            p=target(spine,sign,.135,-.047,.11)
             q=target(p,sign,.012,-.011,.065)
             chain('spine_03',[('breast_'+side,p),('breast_tip_'+side,q)])
     if flags[1]=='1':
