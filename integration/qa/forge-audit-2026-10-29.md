@@ -34,3 +34,21 @@
 - Reopen a legacy v1 `.pcs` project; surface an explicit migration/error path and never silently paint/reassign cloth.
 - Retarget GLB directly without SAF, then walk in place and root motion; confirm clips load and source project remains intact.
 - Stress 3 WebViews at 50MB/100MB GLB and monitor memory, frame rate and orientation/renderer loss.
+
+## Optimization re-test — 2026-10-29 (actual algorithm CI)
+- BEFORE: `simplifyGeometry()` with the default ten coarse trials on a synthetic textured/skinned 315×315 grid (198,450 triangles), with a 20,000 target, output **7,938 triangles**; unsatisfactory oversimplification.
+- AFTER: adaptive bracket/refinement output **20,402 triangles** (+2.01%) with UV, normals, four normalized skin influences retained; 198k synthetic optimization on GitHub CI took **~5.3 s** in Node with winding checks. Performance on 4GB Android hardware remains unverified.
+- A curved 3D test surface had **3,976 output triangles** from a 4,000 target, **0 reversed faces**, RMS height error **0.000391**, maximum vertex displacement **1.17%** of input bounding-box diagonal.
+- A skinned GLB binary export round-trip test confirmed **skins, JOINTS_0, WEIGHTS_0, TEXCOORD_0, NORMAL**, and **animation clips** persisted.
+- Added real-face inversion safeguards, degenerate and duplicate face filtering, bounded vertex movement, and shape distortion reporting.
+- Optimize no longer silently resizes images to 2048 during export: full texture resolution by default; deliberate 2048 option available.
+- 18,324-triangle Tripo woman already lies below the 20,000 preset; the interface now explains that further simplification is unnecessary.
+
+### Still not the Tripo semantic retopology
+The algorithm is local, offline, *vertex clustering*, not AI quad retopology, does not guarantee animation-friendly edge loops, cannot safely handle morph targets or multi-material geometries, and cannot promise to reach 20k for every scanned mesh. The project should not label this feature as equivalent to Tripo's cloud retopology.
+
+### Remaining engineering gaps
+- Rig v7.6 original AutoRig still does not consume `pcsClothMask` when repainting weights; separate original Rig source changes needed.
+- Legacy v1 `.pcs` masks are unsafe to apply automatically. A user-visible explicit review/repaint/acknowledge path now prevents silent replay or overwriting; prior weight operations intentionally require manual reapplication after re-mask.
+- On low-memory Android, hidden WebViews may retain 3D resources: opt-in "Память" button now unloads hidden editors with explicit unsaved-edit warning.
+- No available Android emulator/ADB in execution environment; Chrome automation is blocked by environment policy. GitHub Node, Kotlin build and signed APK checks are *not* a substitute for on-device visual acceptance.
