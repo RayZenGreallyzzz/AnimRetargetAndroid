@@ -179,6 +179,7 @@ test('Tripo-scale diagnostic: ~198k source triangles towards 20k with UV, skin a
  console.log('TRIPO_SCALE_BENCHMARK',JSON.stringify({source,target:goal,achieved:out.triangles||0,vertices:out.vertices||0,elapsedMs:elapsed,reason:out.reason||null,ratio:out.triangles?out.triangles/source:null}));
  assert.ok(out.geometry,out.reason);
  assert.ok(out.triangles<source,'algorithm must actually remove triangles');
+ assert.ok(Math.abs(out.triangles-goal)<goal*.15,`20k target must be within 15%, got ${out.triangles}`);
  assert.ok(out.geometry.getAttribute('uv'),'UV must survive');
  assert.ok(out.geometry.getAttribute('skinWeight'),'skin weights must survive');
  assert.ok(out.geometry.getAttribute('normal'),'normals must survive');
