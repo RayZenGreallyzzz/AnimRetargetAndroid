@@ -88,10 +88,10 @@ jobs:
           for file in root.rglob("*.kt"):
               data=file.read_text(encoding="utf-8",errors="replace").splitlines()
               for i,line in enumerate(data):
-                  if re.search(r'\\b(class|fun|override fun)\\s+\\w+|ACTION_OPEN_DOCUMENT|onActivityResult|registerForActivityResult|intent\\.data|contentResolver',line):
+                  if re.search(r'\b(class|fun|override fun)\s+\w+|ACTION_OPEN_DOCUMENT|onActivityResult|registerForActivityResult|intent\.data|contentResolver',line):
                       if re.search(r'Activity|[Ll]oad|[Ii]mport|[Pp]ick|[Oo]pen|[Mm]odel|[Cc]reate|[Dd]ata|[Uu]ri|[Vv]iew|[Rr]etarget|[Ff]ile',line):
                           matches.append(f"{file.name}:{i+1}: {line.strip()[:160]}")
-          print("\\n".join(matches[:220]))
+          print("\n".join(matches[:220]))
           PY
 
       - name: Inject minimal local WebView assets (build-only validation)
