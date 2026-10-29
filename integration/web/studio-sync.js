@@ -14,7 +14,8 @@
   let lastRevision = -1;
   let hasModel = false;
   let syncing = false;
-  let note = null, syncButton = null, status = null;
+  let note = null, syncButton = null, nextButton = null, status = null;
+  const handledFiles = new WeakSet();
 
   const getActive = () => {
     try {
@@ -50,7 +51,16 @@
       background:"#763819",color:"#fff",padding:"6px 8px", minHeight:"32px"
     });
     syncButton.addEventListener("click", () => { void syncActive(true); });
-    holder.append(note, syncButton);
+    nextButton=document.createElement("button");
+    nextButton.type="button";
+    nextButton.textContent="Далее → Rig";
+    nextButton.hidden=true;
+    Object.assign(nextButton.style,{
+      border:"1px solid #e58d4d",borderRadius:"7px",background:"#246643",
+      color:"#fff",padding:"6px 8px",marginLeft:"4px",minHeight:"32px"
+    });
+    nextButton.onclick=()=>{if(!getActive())return warn("Сначала импортируй GLB");bridge.openTool("rig");};
+    holder.append(note,syncButton,nextButton);
     document.body.appendChild(holder);
     status = holder;
     updateStatus();
@@ -60,14 +70,18 @@
     const model = getActive();
     if (!note || !status) return;
     if (!model) {
-      note.textContent = "Общий персонаж: пока нет GLB. Загрузи модель и экспортируй результат.";
+      note.textContent = tool==="optimize"
+        ? "Шаг 1: открой GLB один раз здесь. После оптимизации экспортируй и перейди в Rig."
+        : "В этом редакторе может отображаться локальный персонаж, но ОБЩЕГО GLB ещё нет. Сохрани/импортируй GLB (первый шаг — Оптимизация).";
       syncButton.hidden = true;
+      if(nextButton)nextButton.hidden=true;
       return;
     }
     const outOfDate = hasModel && model.revision !== lastRevision;
     note.textContent = (outOfDate ? "Есть новая версия: " : "Общий персонаж: ")
       + text(model.name) + " · ревизия " + model.revision;
     syncButton.hidden = syncing || (hasModel && !outOfDate);
+    if(nextButton)nextButton.hidden=tool!=="optimize"||syncing;
     if (!hasModel) syncButton.textContent = "Открыть в этом редакторе";
     else syncButton.textContent = "Загрузить новую версию";
   }
@@ -132,7 +146,7 @@
       if (!bridge.finishSave(token)) throw Error("Сохранение не завершено");
       token = "";
       const latest = getActive();
-      if (latest) lastRevision = latest.revision;
+      if(latest){lastRevision=latest.revision;hasModel=true;}
       updateStatus();
     } catch (err) {
       if (token) bridge.cancelSave(token);
@@ -147,7 +161,8 @@
     // Publishing those again would cause an infinite sync revision loop.
     if (!event.isTrusted) return;
     const file = input.files && input.files[0];
-    if (!file) return;
+    if (!file || handledFiles.has(file)) return;
+    handledFiles.add(file);
     hasModel = true;
     lastRevision = getActive()?.revision ?? -1;
     updateStatus();
@@ -156,7 +171,17 @@
 
   function onReactivated() {
     const active = getActive();
-    if (!active) { updateStatus(); return; }
+    if (!active) {
+      // Restored local file selection can appear before sync listeners mount.
+      // Adopt once, but never re-publish files created by our own workspace import.
+      const input=document.getElementById(modelInput);
+      const file=input?.files?.[0];
+      if(file && !handledFiles.has(file) && !input.dataset.phoenixWorkspaceImport){
+        handledFiles.add(file);hasModel=true;
+        void publishImportedFile(file);
+      }
+      updateStatus();return;
+    }
     // First opening of the other module: automatically load the latest exported model.
     if (!hasModel && !syncing) {
       void syncActive(false);
@@ -180,6 +205,7 @@
     });
     // Vite and three.js initialise after parsing; input handlers must exist first.
     window.setTimeout(onReactivated, 600);
+    window.setTimeout(onReactivated, 2000);
   }
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init,{once:true});
   else init();
