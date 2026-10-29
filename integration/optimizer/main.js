@@ -17,7 +17,8 @@ const ui=[
 '<div id="stats">Нет модели</div>',
 '<label>Меш<select id="meshes"></select></label>',
 '<label>Цель: треугольники<select id="presets"><option value="5000">5 000</option><option value="10000">10 000</option><option value="20000" selected>20 000</option><option value="40000">40 000</option><option value="custom">Своя</option></select></label>',
-'<label>Своя цель<input id="target" type="number" value="20000" min="64" max="260000" step="100"/></label>',
+'<label>Своя цель<input id="target" type="number" value="20000" min="64" step="100"/></label>',
+'<p>Цель действует на выбранный меш, не на весь GLB. Волосы, одежда и тело могут быть разными мешами. Общее число треугольников смотри в статистике.</p>',
 '<label class="toggle"><input id="uv" type="checkbox" checked/> Защищать UV и текстуры</label>',
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
 '<label class="toggle"><input id="limit-textures" type="checkbox"/> Сжать текстуры до 2048 px при экспорте (снижение качества)</label>',
@@ -178,6 +179,7 @@ function cancelPending(){
   msg('Предпросмотр отменён, сетка не изменена.');
 }
 function apply(){
+  if(activeOptimization)return msg('Сначала закончи или отмени обработку тяжёлого меша.');
   if(!pending)return msg('Сначала создай предпросмотр.');
   const {mesh,geometry,type,before}=pending;
   if(!originals.has(mesh))originals.set(mesh,before);
@@ -296,6 +298,7 @@ $('simplify').onclick=async()=>{
   }
 };
 $('guard').onclick=()=>{
+  if(activeOptimization)return msg('Сначала закончи оптимизацию геометрии.');
   const mesh=selected();
   if(!mesh?.isSkinnedMesh)return msg('Выбери отдельный скинненный меш персонажа или одежды.');
   const protection=readClothProtection(mesh);
@@ -321,6 +324,7 @@ $('apply').onclick=apply;
 $('undo').onclick=cancelPending;
 $('reset').onclick=restore;
 async function commitOptimizedToRig(){
+ if(activeOptimization){msg('Сначала закончи или отмени расчёт оптимизации.');return false}
  if(!character){msg('Сначала загрузи модель GLB.');return false}
  if(pending){msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');return false}
  if(!window.PhoenixSuite?.saveBlob){msg('Общее хранилище доступно только в Android Forge.');return false}
@@ -344,6 +348,7 @@ async function commitOptimizedToRig(){
 window.PhoenixOptimizeCommit=commitOptimizedToRig;
 $('opt-next-rig').onclick=commitOptimizedToRig;
 $('export').onclick=async()=>{
+  if(activeOptimization)return msg('Дождись завершения расчёта или нажми отмену.');
   if(!character)return msg('Нет модели для экспорта.');
   if(pending)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
   try{
