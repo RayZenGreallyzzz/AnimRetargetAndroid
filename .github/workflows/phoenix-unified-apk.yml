@@ -69,6 +69,9 @@ jobs:
           npm test
           test -s src/retarget-compat.js
           test -s src/mesh-islands.js
+          test -s src/cloth-protection.js
+          test -s src/cloth-brush.js
+          grep -q 'id="cloth-paint-toggle"' src/main.js
           grep -q 'id="body-surface"' src/main.js
           grep -q 'id="body-skin"' src/main.js
           npm run build -- --base=./
