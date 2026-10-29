@@ -39,7 +39,7 @@ class StudioWebActivity : Activity() {
     private val allowedDomain = "appassets.androidplatform.net"
     private lateinit var container: FrameLayout
     private val views = mutableMapOf<String, WebView>()
-    @Volatile private var selected = "rig"
+    @Volatile private var selected = "optimize"
     fun currentTool(): String = selected
     private var uploadCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var exportingFile: File? = null
@@ -53,7 +53,7 @@ class StudioWebActivity : Activity() {
         bridge = PhoenixWorkspaceBridge(this)
         container = FrameLayout(this)
         setContentView(container)
-        openTool("rig")
+        openTool("optimize")
     }
 
     fun openTool(name: String) {
@@ -290,8 +290,10 @@ class StudioWebActivity : Activity() {
         views[selected]?.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
     }
     override fun onBackPressed() {
-        if(selected == "character" || selected == "optimize") {
+        if(selected == "character") {
             openTool("rig")
+        } else if(selected == "rig") {
+            openTool("optimize")
         } else if (views["rig"]?.canGoBack() == true) {
             views["rig"]?.goBack()
         } else {
