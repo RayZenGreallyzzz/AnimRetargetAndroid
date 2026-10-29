@@ -124,7 +124,7 @@
     transfer.items.add(file);
     target.files=transfer.files;
     target.dispatchEvent(new Event("change",{bubbles:true}));
-    toast("Загружено в "+(tool==="rig"?"Rig":"Character")+": "+name);
+    toast("Загружено в "+({rig:"Rig",character:"Character",optimize:"Optimize"}[tool]||tool)+": "+name);
   }
   function buildTabs() {
     document.title = "Phoenix Character Forge — " + (tool === "rig" ? "Риг и анимация" : tool === "optimize" ? "Оптимизация" : "Персонаж");
@@ -139,10 +139,10 @@
     const tabs=document.createElement("div");tabs.id="phoenix-suite-tabs";tabs.className="phoenix-suite-tabs";
     tabs.setAttribute("aria-label", "Phoenix Character Forge — редакторы");
     const items=[
-      {tool:"rig",label:"🦴 Риг и анимация"},
-      {tool:"retarget",label:"🔁 Ретаргетинг"},
-      {tool:"character",label:"🎭 Персонаж"},
-      {tool:"optimize",label:"🧩 Оптимизация"},
+      {tool:"optimize",label:"① 🧩 Оптимизация"},
+      {tool:"rig",label:"② 🦴 Риг и анимация"},
+      {tool:"character",label:"③ 🎭 Персонаж"},
+      {tool:"retarget",label:"④ 🔁 Ретаргетинг"},
     ];
     for(const item of items){
       const btn=document.createElement("button");btn.type="button";btn.textContent=item.label;
