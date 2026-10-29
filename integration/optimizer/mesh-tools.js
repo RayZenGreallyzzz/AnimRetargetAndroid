@@ -230,18 +230,20 @@ function pointSegmentDistanceSqXYZ(x,y,z,a,b){
  * capsules in bind space (not from the animation frame). Softness protects
  * seams; no hard cutoff is applied to good existing weights.
  */
-export function guardSkinToCapsules(geometry,capsules,{softness=1.5,allowReassign=false}={}){
+export function guardSkinToCapsules(geometry,capsules,{softness=1.5,allowReassign=false,protectedVertices=null}={}){
   const pos=geometry.getAttribute('position'),
         joint=geometry.getAttribute('skinIndex'),
         weight=geometry.getAttribute('skinWeight');
   if(!pos||!joint||!weight)return {reason:'Нужны skinIndex и skinWeight.'};
   if(joint.itemSize!==4||weight.itemSize!==4)
     return {reason:'Для безопасной коррекции требуются четыре слота весов.'};
+  if(protectedVertices && protectedVertices.length!==pos.count)return {reason:'Маска одежды не совпадает с количеством вершин. Отмена обработки.'};
   const out=geometry.clone(),destJ=out.getAttribute('skinIndex'),
         destW=out.getAttribute('skinWeight');
-  let changed=0,reassigned=0,outOfCapsule=0,unresolved=0;
+  let changed=0,reassigned=0,outOfCapsule=0,unresolved=0,protectedCount=0;
   const safeSoftness=Math.max(.1,Math.min(5,softness));
   for(let i=0;i<pos.count;i++){
+    if(protectedVertices?.[i]){protectedCount++;continue;}
     const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
     const candidates=[],original=[],local=[];
     let total=0;
@@ -291,5 +293,5 @@ export function guardSkinToCapsules(geometry,capsules,{softness=1.5,allowReassig
     if(diff)changed++;
   }
   destJ.needsUpdate=true;destW.needsUpdate=true;
-  return {geometry:out,changed,reassigned,outOfCapsule,unresolved};
+  return {geometry:out,changed,reassigned,outOfCapsule,unresolved,protectedCount};
 }
