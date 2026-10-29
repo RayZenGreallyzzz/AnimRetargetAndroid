@@ -25,3 +25,5 @@ Final 2026-10-28 anatomy trial: matched bind pose capsules, real Character Studi
 Final Islands package isolation: build installation suffix .suiteislands, keeping previous .suite and .suitecaps apps intact. Same verified original Rig 7.6 asset.
 
 2026-10-29 test: Phoenix Forge cloth-paint brush, geodesic UV-safe vertex mask, GLB+PCS metadata, protected extra bone weights, 120k-vertex Android safeguard. Exact original Rig 7.6 preserved, Character Studio feature/forge77-anatomy-skin-and-sync-20261028.
+
+2026-10-29: Optimizer capsule correction consumes Character pcsClothMask via validated run-length ranges; protected skin weights/indices immutable; wrong signatures blocked; mesh decimation prohibited when mask exists; added regression tests. Preserve Rig 7.6 and other editor components.
