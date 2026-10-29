@@ -130,6 +130,25 @@
     finally{delete target.dataset.phoenixWorkspaceImport;}
     toast("Загружено в "+({rig:"Rig",character:"Character",optimize:"Optimize"}[tool]||tool)+": "+name);
   }
+  function switchTool(next){
+    if(next===tool)return;
+    if(tool==="optimize"&&next==="rig"){
+      if(typeof window.PhoenixOptimizeCommit==="function"){
+        void window.PhoenixOptimizeCommit();
+      }else toast("Сначала загрузите GLB в Оптимизацию.");
+      return;
+    }
+    if(tool==="rig"&&next==="character"){
+      if(!window.confirm("Перед переходом проверь сохранение GLB из Rig: несохранённые кости, веса и анимации не перейдут в Character. Продолжить с последним сохранённым GLB?"))return;
+    }
+    if(tool==="character"&&next==="retarget"){
+      if(typeof window.PhoenixCharacterCommit==="function"){
+        void window.PhoenixCharacterCommit().catch(e=>toast("Не удалось передать GLB: "+e.message));
+      }else toast("Не удалось подготовить экспорт персонажа.");
+      return;
+    }
+    call("openTool",next);
+  }
   function buildTabs() {
     document.title = "Phoenix Character Forge — " + (tool === "rig" ? "Риг и анимация" : tool === "optimize" ? "Оптимизация" : "Персонаж");
     const subheading = document.querySelector(".ras-brand-copy strong");
@@ -152,7 +171,7 @@
       const btn=document.createElement("button");btn.type="button";btn.textContent=item.label;
       btn.className=item.tool===tool?"is-active":"";
       btn.setAttribute("aria-current",item.tool===tool?"page":"false");
-      btn.onclick=()=>{if(item.tool!==tool)call("openTool",item.tool)};
+      btn.onclick=()=>switchTool(item.tool);
       tabs.append(btn);
     }
     const workspace=document.createElement("button");workspace.type="button";
