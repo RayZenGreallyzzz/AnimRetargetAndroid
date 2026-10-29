@@ -34,6 +34,7 @@ const ui=[
 '<p>Радиусы капсул рассчитываются в BindPose. Если на меше есть маска защиты одежды из Character, отмеченные вершины никогда не меняют веса. Повреждённая маска блокирует коррекцию. Исправление чужих костей выключено по умолчанию.</p>',
 '<h3>03 / Результат</h3><div id="status"></div>',
 '<div class="buttons"><button id="export" class="primary">Экспорт отдельного GLB</button><button id="reset">Восстановить исходник</button></div>',
+'<button id="opt-next-rig" class="primary">✅ Сохранить эту модель → Rig</button>',
 '<p>Сохраняются UV, материалы, привязка и клипы. Не перезаписывай исходную модель до проверки результата.</p>',
 '</aside>'];
 $('app').innerHTML=ui.join('');
@@ -288,6 +289,29 @@ $('guard').onclick=()=>{
 $('apply').onclick=apply;
 $('undo').onclick=cancelPending;
 $('reset').onclick=restore;
+async function commitOptimizedToRig(){
+ if(!character){msg('Сначала загрузи модель GLB.');return false}
+ if(pending){msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');return false}
+ if(!window.PhoenixSuite?.saveBlob){msg('Общее хранилище доступно только в Android Forge.');return false}
+ try{
+  playing=false;
+  msg('Сохраняю текущую модель, скелет, текстуры и анимации для Rig...');
+  const options={binary:true,trs:true,animations,onlyVisible:false};
+  if($('limit-textures').checked)options.maxTextureSize=2048;
+  const output=await exporter.parseAsync(character,options);
+  if(!(output instanceof ArrayBuffer))throw Error('GLB не сформирован.');
+  const saved=await window.PhoenixSuite.saveBlob(new Blob([output],{type:'model/gltf-binary'}),'Forge_Optimize_To_Rig.glb');
+  if(!saved)throw Error('Не удалось передать GLB');
+  msg('GLB сохранён в общие файлы. Открываю Rig с этим персонажем.');
+  window.PhoenixNative?.openTool('rig');
+  return true;
+ }catch(error){
+  msg('Передача в Rig отменена: '+error.message);
+  return false;
+ }
+}
+window.PhoenixOptimizeCommit=commitOptimizedToRig;
+$('opt-next-rig').onclick=commitOptimizedToRig;
 $('export').onclick=async()=>{
   if(!character)return msg('Нет модели для экспорта.');
   if(pending)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
