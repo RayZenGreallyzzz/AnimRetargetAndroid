@@ -33,3 +33,5 @@ Final Islands package isolation: build installation suffix .suiteislands, keepin
 2026-10-29 QA hotfix: full vertex/index cloth-mask hash v2 in Character and Optimizer, block stale masks, regression tests 1001-vertex hidden edit and malformed positions; preserve direct Retarget private handoff. Build separate signed APK for regression testing; older masks v1 require repaint.
 
 2026-10-29 QA2 signed APK release: unique applicationIdSuffix .suiteqav2 prevents debug signature collision with prior .suitertsync; include mask v2 signatures and direct Retarget handoff. No automatic migration of old private-workspace files.
+
+2026-10-29 Optimizer QA3: adaptive budget refinement measured 198450 -> 20402 triangles for 20k target, curvy mesh 0 inverted face and 1.17% displacement, checked GLB skeleton+UV+clip export, preserve textures by default, low-RAM tab release control, explicit v1 mask review in Character. Isolated Android package .suiteoptqa3. Full signed build and test required.
