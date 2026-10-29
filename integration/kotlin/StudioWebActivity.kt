@@ -63,14 +63,16 @@ class StudioWebActivity : Activity() {
                 launchNativeRetarget()
             } else {
                 android.app.AlertDialog.Builder(this)
-                    .setTitle("Передача GLB в Retarget")
-                    .setMessage("Общая модель: " + current.name +
-                        "\nRetarget использует отдельный импорт. Сохрани модель через Android, затем выбери её в Retarget.")
-                    .setPositiveButton("Сохранить и открыть") { _, _ ->
+                    .setTitle("Открыть персонажа в Retarget")
+                    .setMessage("Передать текущий GLB напрямую из Forge: " + current.name +
+                        "\nМодель и скелет будут загружены в Retarget без сохранения в Android.")
+                    .setPositiveButton("Открыть с персонажем") { _, _ ->
+                        launchNativeRetargetWorkspace(current)
+                    }
+                    .setNeutralButton("Сохранить и открыть") { _, _ ->
                         openRetargetAfterExport = true
                         exportFileToPicker(current)
                     }
-                    .setNeutralButton("Открыть без передачи") { _, _ -> launchNativeRetarget() }
                     .setNegativeButton("Отмена", null)
                     .show()
             }
@@ -162,6 +164,22 @@ class StudioWebActivity : Activity() {
         val page = if (name == "rig") "create.html" else "index.html"
         web.loadUrl("https://appassets.androidplatform.net/assets/studio/$name/$page")
         return web
+    }
+
+    private fun launchNativeRetargetWorkspace(file: File) {
+        if (!file.isFile || !file.name.endsWith(".glb", ignoreCase = true)) {
+            Toast.makeText(this, "Нет активного GLB для Retarget", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val next = Intent().setClassName(this, "__NATIVE_RETARGET_ACTIVITY__")
+            // Only a basename. The receiver resolves and canonical-checks it
+            // inside this same APK's app-private workspace.
+            next.putExtra("phoenix_shared_glb_name", file.name)
+            startActivity(next)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Retarget: " + e.message, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun launchNativeRetarget(uri: Uri? = null) {
