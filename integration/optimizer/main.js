@@ -19,6 +19,7 @@ const ui=[
 '<label>Своя цель<input id="target" type="number" value="20000" min="64" max="260000" step="100"/></label>',
 '<label class="toggle"><input id="uv" type="checkbox" checked/> Защищать UV и текстуры</label>',
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
+'<label class="toggle"><input id="limit-textures" type="checkbox"/> Сжать текстуры до 2048 px при экспорте (снижение качества)</label>',
 '<label class="toggle"><input id="wireframe" type="checkbox"/> Показывать сетку поверх модели</label>',
 '<div class="buttons"><button id="simplify" class="primary">Предпросмотр удаления вершин</button><button id="undo">Отменить предпросмотр</button></div>',
 '<button id="compare" disabled>Сравнить: ДО / ПОСЛЕ</button>',
@@ -243,6 +244,8 @@ $('simplify').onclick=async()=>{
   cancelPending();
   const target=Number($('target').value);
   if(!Number.isInteger(target)||target<64)return msg('Задай целевое число треугольников не менее 64.');
+  const existing=Math.floor((mesh.geometry.index?.count||mesh.geometry.getAttribute('position').count)/3);
+  if(target>=existing)return msg('Меш уже соответствует цели: '+fmt(existing)+' ≤ '+fmt(target)+' треугольников. Уменьшать его не нужно. Если общая модель тяжелее, выбери другой меш.');
   msg('Подбираю безопасный размер кластеров...');
   await new Promise(resolve=>requestAnimationFrame(resolve));
   try{
@@ -255,7 +258,8 @@ $('simplify').onclick=async()=>{
     selectedStats();updateCapsules();
     msg('Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
-      (result.triangles>target?' Ограничения UV/костей не позволили достичь цели.':'')+
+      ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+'%.'+
+      (Math.abs(result.targetErrorPercent)>15?' ВНИМАНИЕ: точность цели плохая — проверь сетку до применения.':'')+
       ' Исходник не изменён. Нажми «Применить» или «Отменить».');
   }catch(e){msg('Ошибка оптимизации: '+e.message);}
 };
@@ -289,7 +293,9 @@ $('export').onclick=async()=>{
   if(pending)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
   try{
     playing=false;msg('Сохраняю GLB...');
-    const output=await exporter.parseAsync(character,{binary:true,trs:true,animations,onlyVisible:false,maxTextureSize:2048});
+    const options={binary:true,trs:true,animations,onlyVisible:false};
+    if($('limit-textures').checked)options.maxTextureSize=2048;
+    const output=await exporter.parseAsync(character,options);
     if(!(output instanceof ArrayBuffer))throw Error('GLB не сформирован.');
     const url=URL.createObjectURL(new Blob([output],{type:'model/gltf-binary'}));
     const a=document.createElement('a');a.href=url;a.download='PhoenixCharacterForge_Optimized.glb';
