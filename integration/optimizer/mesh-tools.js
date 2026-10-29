@@ -65,10 +65,34 @@ function cluster(g,cell,options={}){
     if(id===undefined){id=buckets.length;map.set(key,id);buckets.push([]);}
     buckets[id].push(i);oldToNew[i]=id;
   }
-  const faces=[];
+  // Compute each bucket's new vertex position BEFORE deciding triangle
+  // winding. Collapsing corners can invert triangles on curved surfaces.
+  const centers=buckets.map(bucket=>{
+    let x=0,y=0,z=0;
+    for(const i of bucket){x+=pos.getX(i);y+=pos.getY(i);z+=pos.getZ(i);}
+    return [x/bucket.length,y/bucket.length,z/bucket.length];
+  });
+  function normalCross(ax,ay,az,bx,by,bz,cx,cy,cz){
+    const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+    return [uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx];
+  }
+  const faces=[],seenFaces=new Set();let correctedWinding=0,degenerateDropped=0,duplicatesDropped=0;
   for(let k=0;k+2<source.length;k+=3){
-    const a=oldToNew[source[k]],b=oldToNew[source[k+1]],c=oldToNew[source[k+2]];
-    if(a!==b&&a!==c&&b!==c)faces.push(a,b,c);
+    const ia=source[k],ib=source[k+1],ic=source[k+2];
+    let a=oldToNew[ia],b=oldToNew[ib],c=oldToNew[ic];
+    if(a===b||a===c||b===c)continue;
+    const centerA=centers[a],centerB=centers[b],centerC=centers[c];
+    const oldCross=normalCross(pos.getX(ia),pos.getY(ia),pos.getZ(ia),
+      pos.getX(ib),pos.getY(ib),pos.getZ(ib),pos.getX(ic),pos.getY(ic),pos.getZ(ic));
+    const newCross=normalCross(...centerA,...centerB,...centerC);
+    const oldAreaSq=oldCross[0]**2+oldCross[1]**2+oldCross[2]**2;
+    const newAreaSq=newCross[0]**2+newCross[1]**2+newCross[2]**2;
+    if(newAreaSq<=Math.max(1e-20,oldAreaSq*1e-8)){degenerateDropped++;continue;}
+    const orientation=oldCross[0]*newCross[0]+oldCross[1]*newCross[1]+oldCross[2]*newCross[2];
+    if(orientation<0){const swap=b;b=c;c=swap;correctedWinding++;}
+    const sorted=[a,b,c].sort((x,y)=>x-y).join(':');
+    if(seenFaces.has(sorted)){duplicatesDropped++;continue;}
+    seenFaces.add(sorted);faces.push(a,b,c);
   }
   if(faces.length===0)return {reason:'Параметры уничтожают все грани.'};
   const keep=new Set(faces),remap=new Int32Array(buckets.length).fill(-1),active=[];
@@ -118,7 +142,8 @@ function cluster(g,cell,options={}){
     }
   }
   return {geometry:result,vertices:active.length,triangles:faces.length/3,
-    maxMovement,rmsMovement:Math.sqrt(sumSquaredMovement/Math.max(1,movedCount))};
+    maxMovement,rmsMovement:Math.sqrt(sumSquaredMovement/Math.max(1,movedCount)),
+    correctedWinding,degenerateDropped,duplicatesDropped};
 }
 export function simplifyGeometry(g,target,options={}){
   if(Object.values(g.morphAttributes||{}).some(a=>a?.length))
@@ -148,7 +173,8 @@ export function simplifyGeometry(g,target,options={}){
     attempts++;
     const candidate=cluster(g,cell,options);
     if(!candidate.geometry)return;
-    if(candidate.triangles>=oldCount || candidate.maxMovement/diagonal>maxMovementRatio){
+    if(candidate.triangles>=oldCount || candidate.maxMovement/diagonal>maxMovementRatio ||
+      candidate.correctedWinding>oldCount*.025){
       candidate.geometry.dispose();return;
     }
     const score=Math.abs(candidate.triangles-target);
