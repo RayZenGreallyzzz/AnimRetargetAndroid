@@ -190,3 +190,29 @@ test('Tripo-scale diagnostic: ~198k source triangles towards 20k with UV, skin a
  }
  out.geometry.dispose();mesh.dispose();
 });
+
+test('curved textured surface keeps measured shape and does not reverse triangle winding',()=>{
+ const mesh=makeGrid(120),p=mesh.getAttribute('position');
+ const z=(x,y)=>.075*Math.sin(6*Math.PI*x)*Math.cos(4*Math.PI*y);
+ for(let i=0;i<p.count;i++)p.setZ(i,z(p.getX(i),p.getY(i)));
+ mesh.computeBoundingBox();mesh.computeBoundingSphere();
+ const out=simplifyGeometry(mesh,4000,{preserveUV:true,protectSkin:true});
+ assert.ok(out.geometry,out.reason);
+ assert.ok(out.maxMovementPercent<=3.5,'measured clustering movement must meet shape cap');
+ const q=out.geometry.getAttribute('position');
+ let rms=0,flipped=0,active=0;
+ for(let i=0;i<q.count;i++){const e=q.getZ(i)-z(q.getX(i),q.getY(i));rms+=e*e;}
+ rms=Math.sqrt(rms/q.count);
+ for(let k=0;k<out.geometry.index.count;k+=3){
+  const ai=out.geometry.index.getX(k),bi=out.geometry.index.getX(k+1),ci=out.geometry.index.getX(k+2);
+  const cross=(q.getX(bi)-q.getX(ai))*(q.getY(ci)-q.getY(ai))-
+    (q.getY(bi)-q.getY(ai))*(q.getX(ci)-q.getX(ai));
+  if(Math.abs(cross)<1e-10)continue;
+  active++;
+  if(cross>0)flipped++;
+ }
+ console.log('CURVED_SHAPE_BENCHMARK',JSON.stringify({rmsZ:rms,flipped,faces:active,triangles:out.triangles,movement:out.maxMovementPercent}));
+ assert.ok(rms<.015,'curved surface shape should stay close');
+ assert.equal(flipped,0,'triangle winding must not invert');
+ out.geometry.dispose();mesh.dispose();
+});
