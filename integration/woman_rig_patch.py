@@ -51,7 +51,7 @@ def patch_page(path):
     s=path.read_text('utf8')
     marker='<!-- Hand skeleton options for human skeleton -->'
     s=replace_once(s,marker,WOMAN_PANEL+'\n'+marker)
-    s=replace_once(s,'</head>','<script src="./phoenix-woman-ui.js"></script>\n</head>')
+    s=replace_once(s,'</head>','<script src="./phoenix-woman-rig-transform.js"></script>\\n<script src="./phoenix-woman-ui.js"></script>\\n</head>')
     path.write_text(s,'utf8')
 
 def apply(staged_rig):
@@ -62,6 +62,7 @@ def apply(staged_rig):
     patch_page(staged_rig/'create.html')
     source=Path(__file__).with_name('web')/'phoenix-woman-ui.js'
     (staged_rig/'phoenix-woman-ui.js').write_bytes(source.read_bytes())
+    (staged_rig/'phoenix-woman-rig-transform.js').write_bytes((source.parent/'phoenix-woman-rig-transform.js').read_bytes())
     from woman_rig_build import build
     count=build(staged_rig/'rigs')
     print(f'Woman profile: patched {pages[0].name}, built {count} selectable rig variants')
