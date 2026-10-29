@@ -5,6 +5,7 @@ import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {describe,simplifyGeometry,getBindCapsules,guardSkinToCapsules} from './mesh-tools.js';
 import {readClothProtection} from './cloth-mask.js';
+import {optimizeInBackground} from './optimizer-background.js';
 import './style.css';
 
 const $=id=>document.getElementById(id);
@@ -52,6 +53,7 @@ const grid=new THREE.GridHelper(8,16,0x3e4858,0x3e4858);scene.add(grid);
 const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const exporter=new GLTFExporter();
 let character=null,animations=[],meshes=[],pending=null,playing=false,mixer=null;
+let activeOptimization=null;
 const originals=new Map(),capsuleGroup=new THREE.Group();
 let weightDots=null,wireOverlay=null;
 scene.add(capsuleGroup);
@@ -162,6 +164,12 @@ function updateBones(){
   updateCapsules();
 }
 function cancelPending(){
+  if(activeOptimization){
+    const task=activeOptimization;
+    activeOptimization=null;task.cancel();
+    $('simplify').textContent='Предпросмотр удаления вершин';
+    $('simplify').disabled=false;
+  }
   if(!pending)return;
   if(pending.mesh.geometry===pending.geometry)pending.mesh.geometry=pending.before;
   pending.geometry.dispose();pending=null;
@@ -239,18 +247,34 @@ $('compare').onclick=()=>{
   selectedStats();updateCapsules();
 };
 $('simplify').onclick=async()=>{
+  if(activeOptimization){
+    const task=activeOptimization;activeOptimization=null;task.cancel();
+    $('simplify').textContent='Предпросмотр удаления вершин';
+    msg('Расчёт отменён. Исходная геометрия сохранена.');return;
+  }
   const mesh=selected();if(!mesh)return msg('Сначала загрузи GLB.');
   const cloth=readClothProtection(mesh);
-  if(cloth.hasMask)return msg('У этого меша записана маска защиты одежды. Упрощение изменит индексы вершин и уничтожит соответствие маски. Сначала сними маску в Character либо используй отдельную копию GLB.');
+  if(cloth.hasMask)return msg('У этого меша есть защита одежды. Упрощение изменит номера вершин. Сначала создай отдельную копию без маски в Character.');
   cancelPending();
   const target=Number($('target').value);
   if(!Number.isInteger(target)||target<64)return msg('Задай целевое число треугольников не менее 64.');
   const existing=Math.floor((mesh.geometry.index?.count||mesh.geometry.getAttribute('position').count)/3);
-  if(target>=existing)return msg('Меш уже соответствует цели: '+fmt(existing)+' ≤ '+fmt(target)+' треугольников. Уменьшать его не нужно. Если общая модель тяжелее, выбери другой меш.');
-  msg('Подбираю безопасный размер кластеров...');
+  if(target>=existing)return msg('Выбранный меш уже соответствует цели: '+fmt(existing)+' ≤ '+fmt(target)+'. Если весь персонаж тяжелее, выбери другой меш в списке выше.');
+  msg('Обработка большого меша в отдельном потоке… Исходная модель не изменяется.');
+  $('simplify').textContent='✕ Отменить расчёт';
   await new Promise(resolve=>requestAnimationFrame(resolve));
+  let job=null;
   try{
-    const result=simplifyGeometry(mesh.geometry,target,{preserveUV:$('uv').checked,protectSkin:$('joint').checked});
+    job=optimizeInBackground(mesh.geometry,target,{
+      preserveUV:$('uv').checked,protectSkin:$('joint').checked
+    },(attempt,total)=>{
+      msg('Оптимизация меша: проход '+attempt+' из примерно '+total+
+        ' · '+fmt(existing)+' △ · цель '+fmt(target)+' △. Можно отменить.');
+    });
+    activeOptimization=job;
+    const result=await job.promise;
+    if(activeOptimization!==job){result.geometry?.dispose();return}
+    activeOptimization=null;
     if(result.reason)return msg(result.reason);
     pending={mesh,geometry:result.geometry,before:mesh.geometry,type:'упрощения'};
     mesh.geometry=result.geometry;
@@ -259,10 +283,17 @@ $('simplify').onclick=async()=>{
     selectedStats();updateCapsules();
     msg('Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
-      ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+'%; макс. сдвиг вершин '+result.maxMovementPercent+'% диагонали модели.'+
-      (Math.abs(result.targetErrorPercent)>15?' ВНИМАНИЕ: точность цели плохая — проверь сетку до применения.':'')+
-      ' Исходник не изменён. Нажми «Применить» или «Отменить».');
-  }catch(e){msg('Ошибка оптимизации: '+e.message);}
+      ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+
+      '%; макс. сдвиг вершин '+result.maxMovementPercent+'% диагонали.'+
+      (Math.abs(result.targetErrorPercent)>15?' ВНИМАНИЕ: цель достигнута неточно, проверь результат.':'')+
+      ' Исходник сохранён; нажми «Применить» или «Отменить».');
+  }catch(e){
+    if(job&&activeOptimization!==job)return;
+    msg('Ошибка оптимизации: '+e.message);
+  }finally{
+    if(activeOptimization===job)activeOptimization=null;
+    if(!activeOptimization)$('simplify').textContent='Предпросмотр удаления вершин';
+  }
 };
 $('guard').onclick=()=>{
   const mesh=selected();
