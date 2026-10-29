@@ -256,3 +256,21 @@ test('optimized skinned character GLB round-trip retains UV, bones and animation
   source?.dispose();globalThis.FileReader=oldReader;
  }
 });
+
+test('previous 260000-triangle cap is gone: 273800 triangles optimize with skin and UVs',()=>{
+ const source=makeGrid(370),original=source.index.count/3;
+ assert.equal(original,273800);
+ const start=Date.now();
+ const result=simplifyGeometry(source,20000,{preserveUV:true,protectSkin:true});
+ console.log('LARGE_MESH_BENCHMARK',JSON.stringify({
+  source:original,target:20000,triangles:result.triangles,elapsedMs:Date.now()-start,
+  reason:result.reason||null,attempts:result.attempts,maxMovementPercent:result.maxMovementPercent
+ }));
+ assert.ok(result.geometry,result.reason);
+ assert.ok(result.triangles<original);
+ assert.ok(result.geometry.getAttribute('uv'));
+ assert.ok(result.geometry.getAttribute('skinIndex'));
+ assert.ok(result.geometry.getAttribute('skinWeight'));
+ assert.ok(result.triangles>=13000,'no accidental 20k oversimplification');
+ result.geometry.dispose();source.dispose();
+});
