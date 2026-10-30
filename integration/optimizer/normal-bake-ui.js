@@ -4,7 +4,7 @@ import {bakeNormalsInBackground} from './optimizer-background.js';
 /** Independent UI controller. Only attach a material after a complete bake.
  * A cancelled/error bake cannot mutate the original material or geometry.
  */
-export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
+export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify,canStart}){
  let task=null,generation=0;
  const entries=new Map();
  function isBusy(){return task!==null}
@@ -70,6 +70,7 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
   const low=preview?.mesh===mesh?preview.geometry:mesh?.geometry;
   if(!mesh||!high||!low||high===low)return report('Сначала выполни QEM-оптимизацию. Нужны исходная тяжёлая и новая лёгкая сетка.');
   if(preview&&preview.mesh!==mesh)return report('Выбери меш с текущим предпросмотром.');
+  if(canStart?.()===false)return report('PBR-карты уже запечены и включены. Сначала восстанови исходный материал, затем запускай normal map.');
   if(Array.isArray(mesh.material)||!low.getAttribute('uv'))
    return report('Запекание пока поддерживает один материал и UV.');
   if(mesh.material?.normalMap && !$('bake-overwrite').checked)
@@ -113,5 +114,5 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
    setTimeout(()=>URL.revokeObjectURL(url),15000);
   },'image/png');
  };
- return {isBusy,cancel,clear,clearAll,refresh};
+ return {isBusy,hasMaterial:mesh=>entries.has(mesh),cancel,clear,clearAll,refresh};
 }
