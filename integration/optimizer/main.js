@@ -8,6 +8,7 @@ import {readClothProtection} from './cloth-mask.js';
 import {paintDetailSphere,countLocked} from './detail-locks.js';
 import {optimizeInBackground} from './optimizer-background.js';
 import {setupNormalBaker} from './normal-bake-ui.js';
+import {setupPbrBaker} from './pbr-bake-ui.js';
 import './style.css';
 
 const $=id=>document.getElementById(id);
@@ -44,7 +45,19 @@ const ui=[
 '<label class="toggle"><input id="bake-overwrite" type="checkbox"/> Заменить существующую normal map (исходная останется в оригинале)</label>',
 '<div class="buttons"><button id="bake-normal" class="primary">🧩 Запечь normal map</button><button id="bake-download" disabled>PNG карты</button></div>',
 '<p id="bake-status">Нужны исходный и облегчённый меш с UV. Начни с 256 px.</p>',
-'<h3>03 / Объёмы костей и одежда</h3>',
+'<h3>03 / Перенос PBR-карт — экспериментально</h3>',
+'<p>QEM уже сохраняет оригинальные UV и PBR-карты, поэтому обычной модели перепекание НЕ требуется. Включай перенос только для сравнения. Поддерживается один материал и UV0, а не автоматическая перепаковка атласов.</p>',
+'<label class="toggle"><input id="pbr-replace" type="checkbox"/> Создать новые PBR-карты (не перезаписывает исходный GLB)</label>',
+'<label class="toggle"><input id="pbr-color" type="checkbox" checked/> Цвет и прозрачность</label>',
+'<label class="toggle"><input id="pbr-metal" type="checkbox" checked/> Металличность и шероховатость</label>',
+'<label class="toggle"><input id="pbr-ao" type="checkbox" checked/> Ambient Occlusion (AO)</label>',
+'<label class="toggle"><input id="pbr-emissive" type="checkbox" checked/> Свечение (Emissive)</label>',
+'<label>Размер новых PBR-карт<select id="pbr-size"><option value="128">128 px — пробный</option><option value="256" selected>256 px</option><option value="512">512 px — детальнее</option></select></label>',
+'<button id="pbr-bake" class="primary">🎨 Перенести PBR-карты</button>',
+'<label>Скачать отдельную карту<select id="pbr-save-which"></select></label>',
+'<button id="pbr-download" disabled>Сохранить PNG карты</button>',
+'<p id="pbr-status">Сначала оптимизируй меш. Исходные текстуры останутся без изменений.</p>',
+'<h3>04 / Объёмы костей и одежда</h3>',
 '<label>Кость<select id="bones"></select></label>',
 '<label>Радиус капсул: <span id="radius-value">1.00</span>×<input id="radius" type="range" min=".4" max="2.8" step=".1" value="1"/></label>',
 '<label class="toggle"><input id="capsules" type="checkbox" checked/> Показывать капсулы вокруг костей</label>',
@@ -52,7 +65,7 @@ const ui=[
 '<label class="toggle"><input id="reassign" type="checkbox"/> Исправить совсем чужие кости на одежде (осторожно)</label>',
 '<div class="buttons"><button id="guard">Предпросмотр защиты весов</button><button id="apply" class="primary">Применить</button></div>',
 '<p>Радиусы капсул рассчитываются в BindPose. Если на меше есть маска защиты одежды из Character, отмеченные вершины никогда не меняют веса. Повреждённая маска блокирует коррекцию. Исправление чужих костей выключено по умолчанию.</p>',
-'<h3>04 / Результат</h3><div id="status"></div>',
+'<h3>05 / Результат</h3><div id="status"></div>',
 '<div class="buttons"><button id="export" class="primary">Экспорт отдельного GLB</button><button id="reset">Восстановить исходник</button></div>',
 '<button id="opt-next-rig" class="primary">✅ Сохранить эту модель → Rig</button>',
 '<p>Сохраняются UV, материалы, привязка и клипы. Не перезаписывай исходную модель до проверки результата.</p>',
@@ -201,6 +214,7 @@ function selectedStats(){
        ' треугольников · '+(m.isSkinnedMesh?m.skeleton.bones.length+' костей':'без скелета'):'')+
     (protection?.hasMask ? '\nЗащита одежды: '+(protection.reason || fmt(protection.count)+' вершин защищено') : '');
   normalBaker.refresh();
+  pbrBaker.refresh();
 }
 function clearWire(){
   if(wireOverlay){
@@ -295,11 +309,17 @@ function updateBones(){
   }
   updateCapsules();
 }
+let pbrBaker=null;
 const normalBaker=setupNormalBaker({
  getMesh:selected,getPending:()=>pending,getOriginal:mesh=>originals.get(mesh),
- $,notify:msg
+ $,notify:msg,canStart:()=>!pbrBaker?.hasMaterial(selected())
+});
+pbrBaker=setupPbrBaker({
+ getMesh:selected,getPending:()=>pending,getOriginal:mesh=>originals.get(mesh),
+ $,notify:msg,canStart:()=>!normalBaker.hasMaterial(selected())
 });
 function cancelPending(){
+  pbrBaker.cancel();
   normalBaker.cancel();
   if(activeOptimization){
     const task=activeOptimization;
@@ -308,6 +328,7 @@ function cancelPending(){
     $('simplify').disabled=false;
   }
   if(!pending)return;
+  pbrBaker.clear(pending.mesh);
   normalBaker.clear(pending.mesh);
   if(pending.mesh.geometry===pending.geometry)pending.mesh.geometry=pending.before;
   pending.geometry.dispose();pending=null;
@@ -316,7 +337,7 @@ function cancelPending(){
   msg('Предпросмотр отменён, сетка не изменена.');
 }
 function apply(){
-  if(activeOptimization||normalBaker.isBusy())return msg('Сначала заверши расчёт геометрии или нормалей.');
+  if(activeOptimization||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала заверши расчёт геометрии или карт PBR.');
   if(!pending)return msg('Сначала создай предпросмотр.');
   const {mesh,geometry,type,before}=pending;
   if(!originals.has(mesh))originals.set(mesh,before);
@@ -328,7 +349,7 @@ function apply(){
   msg('Изменение '+type+' применено в рабочей копии. Экспортируй GLB отдельно или восстанови оригинал.');
 }
 function restore(){
-  cancelPending();normalBaker.clearAll();
+  cancelPending();pbrBaker.clearAll();normalBaker.clearAll();
   for(const [mesh,original] of originals){
     if(mesh.geometry!==original)mesh.geometry.dispose();
     mesh.geometry=original;
@@ -397,7 +418,7 @@ $('compare').onclick=()=>{
   selectedStats();updateCapsules();
 };
 $('simplify').onclick=async()=>{
-  if(normalBaker.isBusy())return msg('Сначала закончи или отмени запекание normal map.');
+  if(normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала закончи или отмени запекание текстур.');
   if(activeOptimization){
     const task=activeOptimization;activeOptimization=null;task.cancel();
     $('simplify').textContent='Предпросмотр удаления вершин';
@@ -456,7 +477,7 @@ $('simplify').onclick=async()=>{
   }
 };
 $('guard').onclick=()=>{
-  if(activeOptimization||normalBaker.isBusy())return msg('Сначала закончи оптимизацию или запекание.');
+  if(activeOptimization||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала закончи оптимизацию или запекание.');
   const mesh=selected();
   if(!mesh?.isSkinnedMesh)return msg('Выбери отдельный скинненный меш персонажа или одежды.');
   const protection=readClothProtection(mesh);
@@ -482,7 +503,7 @@ $('apply').onclick=apply;
 $('undo').onclick=cancelPending;
 $('reset').onclick=restore;
 async function commitOptimizedToRig(){
- if(normalBaker.isBusy())return false;
+ if(normalBaker.isBusy()||pbrBaker.isBusy())return false;
  if(activeOptimization){msg('Сначала закончи или отмени расчёт оптимизации.');return false}
  if(!character){msg('Сначала загрузи модель GLB.');return false}
  if(pending){msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');return false}
@@ -507,7 +528,7 @@ async function commitOptimizedToRig(){
 window.PhoenixOptimizeCommit=commitOptimizedToRig;
 $('opt-next-rig').onclick=commitOptimizedToRig;
 $('export').onclick=async()=>{
-  if(activeOptimization||normalBaker.isBusy())return msg('Дождись завершения расчёта или нажми отмену.');
+  if(activeOptimization||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Дождись завершения расчёта или нажми отмену.');
   if(!character)return msg('Нет модели для экспорта.');
   if(pending)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
   try{
