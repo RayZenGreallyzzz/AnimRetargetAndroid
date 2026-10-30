@@ -179,6 +179,18 @@ function textureSafety(mesh){
 
 function selectedStats(){
   if(!character)return $('stats').textContent='Нет модели';
+  // Geometry/triangle counts change in preview, compare and apply.
+  // Keeping the initial count in the mesh selector misleads users into
+  // thinking a 744k-face mesh was not optimized after a 45k preview.
+  for(let i=0;i<meshes.length;i++){
+    const node=meshes[i].node,option=$('meshes').options[i];
+    if(!node?.geometry||!option)continue;
+    const geometry=node.geometry,faceCount=Math.floor(
+      (geometry.index?.count||geometry.getAttribute('position')?.count||0)/3);
+    const inPreview=pending?.mesh===node;
+    const stage=inPreview?' · ПРЕДПРОСМОТР':originals.has(node)?' · ИЗМЕНЁН':'';
+    option.textContent=meshes[i].name+' · '+fmt(faceCount)+' △'+stage;
+  }
   const d=describe(character),m=selected();
   const protection=m?readClothProtection(m):null;
   $('stats').textContent='Всего: '+fmt(d.vertices)+' вершин / '+fmt(d.triangles)+' треугольников'+
@@ -359,7 +371,16 @@ $('opt-model-file').onchange=async e=>{
   }catch(e){msg('Импорт не удался: '+e.message);}
 };
 $('meshes').onchange=()=>{disableDetailPainting();cancelPending();updateBones();selectedStats();updateDetailOverlay();};
-$('presets').onchange=()=>{if($('presets').value!=='custom')$('target').value=$('presets').value;};
+$('presets').onchange=()=>{
+  if($('presets').value!=='custom')$('target').value=$('presets').value;
+};
+$('target').oninput=()=>{
+  // Always make the visible preset agree with the numeric target the worker
+  // actually uses. "Своя" is the only honest label for nonpreset values.
+  const value=String(Number($('target').value));
+  const option=[...$('presets').options].find(o=>o.value===value);
+  $('presets').value=option?option.value:'custom';
+};
 $('bones').onchange=updateCapsules;
 $('radius').oninput=()=>{$('radius-value').textContent=Number($('radius').value).toFixed(2);updateCapsules();};
 $('capsules').onchange=updateCapsules;
