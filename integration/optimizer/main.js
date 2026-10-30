@@ -41,6 +41,7 @@ const ui=[
 '<p>После QEM-предпросмотра перенеси рельеф тяжёлой сетки в normal map. Работает офлайн, оригинальный GLB не меняется. Это не запекание цвета.</p>',
 '<label>Разрешение карты<select id="bake-size"><option value="128">128 px — быстро</option><option value="256" selected>256 px</option><option value="512">512 px — детальнее</option></select></label>',
 '<label>Глубина поиска поверхности<select id="bake-depth"><option value=".012">1,2% диагонали</option><option value=".035" selected>3,5% диагонали</option><option value=".08">8% диагонали</option></select></label>',
+'<label class="toggle"><input id="bake-overwrite" type="checkbox"/> Заменить существующую normal map (исходная останется в оригинале)</label>',
 '<div class="buttons"><button id="bake-normal" class="primary">🧩 Запечь normal map</button><button id="bake-download" disabled>PNG карты</button></div>',
 '<p id="bake-status">Нужны исходный и облегчённый меш с UV. Начни с 256 px.</p>',
 '<h3>03 / Объёмы костей и одежда</h3>',
