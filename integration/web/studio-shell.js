@@ -130,24 +130,90 @@
     finally{delete target.dataset.phoenixWorkspaceImport;}
     toast("Загружено в "+({rig:"Rig",character:"Character",optimize:"Optimize"}[tool]||tool)+": "+name);
   }
-  function switchTool(next){
-    if(next===tool)return;
-    if(tool==="optimize"&&next==="rig"){
-      if(typeof window.PhoenixOptimizeCommit==="function"){
-        void window.PhoenixOptimizeCommit();
-      }else toast("Сначала загрузите GLB в Оптимизацию.");
+  let navigationBusy=false;
+  function currentSharedRevision(){
+    try{return Number(JSON.parse(call("getActiveFileJson")||"{}").revision)||0}
+    catch{return 0}
+  }
+  function setRigExportOption(name,value){
+    const input=document.querySelector('input[name="'+name+'"][value="'+value+'"]');
+    if(input && !input.checked){
+      input.checked=true;
+      input.dispatchEvent(new Event("change",{bubbles:true}));
+    }
+  }
+  async function commitRigBeforeLeave(next){
+    const state=window.PhoenixSync?.getState?.()||{};
+    const button=document.getElementById("export-button");
+    const exportReady=button && !button.disabled &&
+      !!(button.getClientRects?.().length);
+    if(!exportReady){
+      if(state.dirty){
+        throw Error("У Rig есть несохранённые изменения, а экспорт ещё недоступен. Закончи расчёт весов и открой шаг «Анимации → Экспорт», затем повтори переход.");
+      }
+      // No edits: the shared GLB is already current. No need to export
+      // a blank skeleton or demo from the uninitialized Rig editor.
       return;
     }
-    if(tool==="rig"&&next==="character"){
-      if(!window.confirm("Перед переходом проверь сохранение GLB из Rig: несохранённые кости, веса и анимации не перейдут в Character. Продолжить с последним сохранённым GLB?"))return;
+    // Always transfer the current complete skinned mesh (not skeleton-only or FBX).
+    setRigExportOption("export-format","glb");
+    setRigExportOption("export-contents","full");
+    const before=currentSharedRevision();
+    let unsubscribe=null;
+    let timeout=null;
+    const committed=new Promise((resolve,reject)=>{
+      let finished=false;
+      const done=(error)=>{
+        if(finished)return;finished=true;
+        window.removeEventListener("phoenix:workspace-updated",onWrite);
+        if(timeout!==null)clearTimeout(timeout);
+        if(error)reject(error);else resolve();
+      };
+      const onWrite=()=>{
+        if(currentSharedRevision()>before)done(null);
+      };
+      window.addEventListener("phoenix:workspace-updated",onWrite);
+      timeout=setTimeout(()=>done(new Error(
+        "Rig не закончил сохранять GLB. Перейди к экспорту и проверь, что выбран формат GLB и содержимое «Модель + анимации»."
+      )),90000);
+      unsubscribe=()=>done(new Error("Экспорт Rig прерван"));
+      try{button.click()}catch(error){done(error)}
+    });
+    try{
+      toast("Сохраняю кости, веса и анимации из Rig в общий GLB…");
+      await committed;
+      window.PhoenixSync?.markSaved?.(currentSharedRevision());
+    }finally{unsubscribe=null}
+  }
+  async function switchTool(next){
+    if(next===tool||navigationBusy)return;
+    navigationBusy=true;
+    const items=document.querySelectorAll("#phoenix-suite-tabs button");
+    items.forEach(b=>b.disabled=true);
+    try{
+      await window.PhoenixSync?.whenReady?.();
+      if(tool==="optimize"){
+        if(typeof window.PhoenixOptimizeSave!=="function")
+          throw Error("Оптимизация ещё не готова сохранить общий GLB.");
+        if(!(await window.PhoenixOptimizeSave()))
+          throw Error("GLB из Оптимизации не сохранён. Заверши предпросмотр или проверь сообщение внизу панели.");
+      } else if(tool==="character"){
+        if(typeof window.PhoenixCharacterSave!=="function")
+          throw Error("Character ещё не готов сохранить персонажа.");
+        await window.PhoenixCharacterSave();
+      } else if(tool==="rig"){
+        await commitRigBeforeLeave(next);
+      }
+      const state=window.PhoenixSync?.getState?.();
+      if(state?.dirty)
+        throw Error("Изменения остались несохранёнными; автоматический переход остановлен.");
+      call("openTool",next);
+    }catch(error){
+      toast("Переход остановлен: "+(error?.message||String(error)));
+    }finally{
+      navigationBusy=false;
+      items.forEach(b=>b.disabled=false);
     }
-    if(tool==="character"&&next==="retarget"){
-      if(typeof window.PhoenixCharacterCommit==="function"){
-        void window.PhoenixCharacterCommit().catch(e=>toast("Не удалось передать GLB: "+e.message));
-      }else toast("Не удалось подготовить экспорт персонажа.");
-      return;
-    }
-    call("openTool",next);
   }
   function buildTabs() {
     document.title = "Phoenix Character Forge — " + (tool === "rig" ? "Риг и анимация" : tool === "optimize" ? "Оптимизация" : "Персонаж");
@@ -230,5 +296,5 @@
     try{return await persistBlob(url,name)}
     finally{URL.revokeObjectURL(url)}
   }
-  window.PhoenixSuite = Object.freeze({useWorkspaceFile,saveBlob,toast,tool});
+  window.PhoenixSuite = Object.freeze({useWorkspaceFile,saveBlob,toast,tool,navigateTo:switchTool});
 })();
