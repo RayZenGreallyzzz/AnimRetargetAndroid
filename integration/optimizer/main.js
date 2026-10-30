@@ -6,7 +6,8 @@ import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {describe,simplifyGeometry,getBindCapsules,guardSkinToCapsules} from './mesh-tools.js';
 import {readClothProtection} from './cloth-mask.js';
 import {paintDetailSphere,countLocked} from './detail-locks.js';
-import {optimizeInBackground,bakeNormalsInBackground} from './optimizer-background.js';
+import {optimizeInBackground} from './optimizer-background.js';
+import {setupNormalBaker} from './normal-bake-ui.js';
 import './style.css';
 
 const $=id=>document.getElementById(id);
@@ -70,8 +71,7 @@ const grid=new THREE.GridHelper(8,16,0x3e4858,0x3e4858);scene.add(grid);
 const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const exporter=new GLTFExporter();
 let character=null,animations=[],meshes=[],pending=null,playing=false,mixer=null;
-let activeOptimization=null,activeBake=null;
-const bakedMaterials=new Map();
+let activeOptimization=null;
 const originals=new Map(),capsuleGroup=new THREE.Group();
 let weightDots=null,wireOverlay=null;
 const detailMasks=new WeakMap();let detailPainting=false,detailOverlay=null;
@@ -279,7 +279,12 @@ function updateBones(){
   }
   updateCapsules();
 }
+const normalBaker=setupNormalBaker({
+ getMesh:selected,getPending:()=>pending,getOriginal:mesh=>originals.get(mesh),
+ $,notify:msg
+});
 function cancelPending(){
+  normalBaker.cancel();
   if(activeOptimization){
     const task=activeOptimization;
     activeOptimization=null;task.cancel();
@@ -287,6 +292,7 @@ function cancelPending(){
     $('simplify').disabled=false;
   }
   if(!pending)return;
+  normalBaker.clear(pending.mesh);
   if(pending.mesh.geometry===pending.geometry)pending.mesh.geometry=pending.before;
   pending.geometry.dispose();pending=null;
   $('compare').disabled=true;
@@ -294,7 +300,7 @@ function cancelPending(){
   msg('Предпросмотр отменён, сетка не изменена.');
 }
 function apply(){
-  if(activeOptimization)return msg('Сначала закончи или отмени обработку тяжёлого меша.');
+  if(activeOptimization||normalBaker.isBusy())return msg('Сначала заверши расчёт геометрии или нормалей.');
   if(!pending)return msg('Сначала создай предпросмотр.');
   const {mesh,geometry,type,before}=pending;
   if(!originals.has(mesh))originals.set(mesh,before);
@@ -306,7 +312,7 @@ function apply(){
   msg('Изменение '+type+' применено в рабочей копии. Экспортируй GLB отдельно или восстанови оригинал.');
 }
 function restore(){
-  cancelPending();
+  cancelPending();normalBaker.clearAll();
   for(const [mesh,original] of originals){
     if(mesh.geometry!==original)mesh.geometry.dispose();
     mesh.geometry=original;
@@ -366,6 +372,7 @@ $('compare').onclick=()=>{
   selectedStats();updateCapsules();
 };
 $('simplify').onclick=async()=>{
+  if(normalBaker.isBusy())return msg('Сначала закончи или отмени запекание normal map.');
   if(activeOptimization){
     const task=activeOptimization;activeOptimization=null;task.cancel();
     $('simplify').textContent='Предпросмотр удаления вершин';
@@ -424,7 +431,7 @@ $('simplify').onclick=async()=>{
   }
 };
 $('guard').onclick=()=>{
-  if(activeOptimization)return msg('Сначала закончи оптимизацию геометрии.');
+  if(activeOptimization||normalBaker.isBusy())return msg('Сначала закончи оптимизацию или запекание.');
   const mesh=selected();
   if(!mesh?.isSkinnedMesh)return msg('Выбери отдельный скинненный меш персонажа или одежды.');
   const protection=readClothProtection(mesh);
@@ -450,6 +457,7 @@ $('apply').onclick=apply;
 $('undo').onclick=cancelPending;
 $('reset').onclick=restore;
 async function commitOptimizedToRig(){
+ if(normalBaker.isBusy())return false;
  if(activeOptimization){msg('Сначала закончи или отмени расчёт оптимизации.');return false}
  if(!character){msg('Сначала загрузи модель GLB.');return false}
  if(pending){msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');return false}
@@ -474,7 +482,7 @@ async function commitOptimizedToRig(){
 window.PhoenixOptimizeCommit=commitOptimizedToRig;
 $('opt-next-rig').onclick=commitOptimizedToRig;
 $('export').onclick=async()=>{
-  if(activeOptimization)return msg('Дождись завершения расчёта или нажми отмену.');
+  if(activeOptimization||normalBaker.isBusy())return msg('Дождись завершения расчёта или нажми отмену.');
   if(!character)return msg('Нет модели для экспорта.');
   if(pending)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
   try{
