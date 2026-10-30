@@ -8,6 +8,25 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
  let task=null,generation=0;
  const entries=new Map();
  function isBusy(){return task!==null}
+ function report(message){
+  // The bottom-wide #status is often off-screen on an Android tablet.
+  // Keep every blocker and progress message next to "Запечь normal map".
+  $('bake-status').textContent=message;
+  notify(message);
+ }
+ function refresh(){
+  const mesh=getMesh(),preview=getPending();
+  $('bake-download').disabled=!mesh||!entries.has(mesh);
+  if(task)return;
+  if(!mesh){$('bake-status').textContent='Сначала импортируй GLB.';return}
+  if(entries.has(mesh))return;
+  const high=preview?.mesh===mesh?preview.before:getOriginal(mesh);
+  if(!high){$('bake-status').textContent='Сначала выполни QEM-оптимизацию (предпросмотр), затем запекай normal map.';return}
+  if(mesh.material?.normalMap&&!$('bake-overwrite').checked)
+   $('bake-status').textContent='⚠️ У модели уже есть normal map. QEM сохранил её. Для нового запекания поставь галочку «Заменить существующую normal map».';
+  else
+   $('bake-status').textContent='Готово к запеканию: исходная и облегчённая сетки доступны. Выбери 256 px для первой проверки.';
+ }
  function clear(mesh){
   const item=entries.get(mesh);
   if(!item)return;
@@ -49,17 +68,17 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
   if(task){cancel();notify('Запекание отменено. Исходник сохранён.');return}
   const mesh=getMesh(),preview=getPending(),high=preview?.mesh===mesh?preview.before:getOriginal(mesh);
   const low=preview?.mesh===mesh?preview.geometry:mesh?.geometry;
-  if(!mesh||!high||!low||high===low)return notify('Сначала выполни QEM-оптимизацию. Нужны исходная тяжёлая и новая лёгкая сетка.');
-  if(preview&&preview.mesh!==mesh)return notify('Выбери меш с текущим предпросмотром.');
+  if(!mesh||!high||!low||high===low)return report('Сначала выполни QEM-оптимизацию. Нужны исходная тяжёлая и новая лёгкая сетка.');
+  if(preview&&preview.mesh!==mesh)return report('Выбери меш с текущим предпросмотром.');
   if(Array.isArray(mesh.material)||!low.getAttribute('uv'))
-   return notify('Запекание пока поддерживает один материал и UV.');
+   return report('Запекание пока поддерживает один материал и UV.');
   if(mesh.material?.normalMap && !$('bake-overwrite').checked)
-   return notify('В исходной модели уже есть normal map! QEM сохраняет её без изменений. Для сравнения с новым запеканием явно включи «Заменить существующую normal map».');
+   return report('⚠️ У модели уже есть normal map. QEM сохраняет её без изменений. Чтобы запечь новую и включить кнопку PNG, поставь галочку «Заменить существующую normal map».');
   const map=mesh.material?.normalMap||mesh.material?.map||null;
   if(Math.abs(map?.rotation||0)>1e-7)
-   return notify('Запекание повёрнутого атласа пока не поддерживается.');
+   return report('Запекание повёрнутого атласа пока не поддерживается.');
   if(map?.flipY===true)
-   return notify('Требуется glTF-текстура с flipY=false, чтобы не перевернуть normal map.');
+   return report('Требуется glTF-текстура с flipY=false, чтобы не перевернуть normal map.');
   const repeat=[map?.repeat?.x||1,map?.repeat?.y||1],
     offset=[map?.offset?.x||0,map?.offset?.y||0],token=++generation;
   try{
@@ -82,6 +101,7 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
    if(token===generation){task=null;$('bake-normal').textContent='🧩 Запечь normal map'}
   }
  }
+ $('bake-overwrite').onchange=refresh;
  $('bake-normal').onclick=start;
  $('bake-download').onclick=()=>{
   const entry=entries.get(getMesh());if(!entry)return notify('Сначала запеки normal map.');
@@ -93,5 +113,5 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
    setTimeout(()=>URL.revokeObjectURL(url),15000);
   },'image/png');
  };
- return {isBusy,cancel,clear,clearAll};
+ return {isBusy,cancel,clear,clearAll,refresh};
 }
