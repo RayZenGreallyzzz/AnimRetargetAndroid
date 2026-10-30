@@ -204,5 +204,7 @@ export function setupPbrBaker({getMesh,getPending,getOriginal,$,notify,canStart}
    setTimeout(()=>URL.revokeObjectURL(url),15000);
   },'image/png');
  };
- return {isBusy,hasMaterial,cancel,clear,clearAll,refresh};
+ return {isBusy,hasMaterial,showPreview(mesh,after){
+  const e=entries.get(mesh);if(e)mesh.material=after?e.baked:e.original;
+ },cancel,clear,clearAll,refresh};
 }
