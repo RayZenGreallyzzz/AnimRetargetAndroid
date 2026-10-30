@@ -11,7 +11,7 @@ function fixture({hasPreview=true,hasMaps=true}={}){
  }
  const material={map:hasMaps?{channel:0}:null};
  const geometry={getAttribute:name=>name==='uv'?{count:4}:null};
- const mesh={geometry,material},preview={mesh,before:geometry,geometry};
+ const mesh={geometry,material},preview={mesh,before:{...geometry,original:true},geometry};
  const log=[],pbr=setupPbrBaker({
   getMesh:()=>mesh,getPending:()=>hasPreview?preview:null,
   getOriginal:()=>undefined,
