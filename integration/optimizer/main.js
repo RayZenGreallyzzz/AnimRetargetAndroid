@@ -54,6 +54,7 @@ const ui=[
 '<label class="toggle"><input id="pbr-emissive" type="checkbox" checked/> Свечение (Emissive)</label>',
 '<label>Размер новых PBR-карт<select id="pbr-size"><option value="128">128 px — пробный</option><option value="256" selected>256 px</option><option value="512">512 px — детальнее</option></select></label>',
 '<button id="pbr-bake" class="primary">🎨 Перенести PBR-карты</button>',
+'<button id="pbr-reset">Вернуть исходные PBR-текстуры</button>',
 '<label>Скачать отдельную карту<select id="pbr-save-which"></select></label>',
 '<button id="pbr-download" disabled>Сохранить PNG карты</button>',
 '<p id="pbr-status">Сначала оптимизируй меш. Исходные текстуры останутся без изменений.</p>',
