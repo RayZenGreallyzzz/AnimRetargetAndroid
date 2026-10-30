@@ -75,6 +75,7 @@ jobs:
           grep -q 'id="body-surface"' src/main.js
           grep -q 'id="body-skin"' src/main.js
           grep -q 'id="character-next"' src/main.js
+          grep -q 'window.PhoenixCharacterSave=' src/main.js
           npm run build -- --base=./
           test -s dist/index.html
 
@@ -97,6 +98,7 @@ jobs:
           node --check integration/web/studio-shell.js
           node --check integration/web/studio-sync.js
           node --test integration/tests/flow-sync.test.cjs
+          python3 -m unittest integration.tests.test_rig_shared_export -v
           python3 -m unittest discover -s integration/tests -v
 
       - name: Verify and extract original Anim Retarget Kotlin sources
@@ -121,6 +123,8 @@ jobs:
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
           python3 integration/woman_rig_patch.py AnimRetargetAndroid/app/src/main/assets/studio/rig
+          python3 integration/patch_rig_shared_export.py AnimRetargetAndroid/app/src/main/assets/studio/rig
+          grep -Rl 'PhoenixSuite.saveBlob(t,n)' AnimRetargetAndroid/app/src/main/assets/studio/rig/assets
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/rigs/rig-woman-1000.glb
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/phoenix-woman-ui.js
           grep -q 'phoenix-woman-bone-options' AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
