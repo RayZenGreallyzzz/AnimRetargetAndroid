@@ -86,3 +86,21 @@ test('gltfpack-style stride8 POSITION and stride4 normalized NORMAL round-trip t
   result.geometry.dispose();
  }finally{g.dispose();globalThis.Worker=nativeWorker}
 });
+
+test('QEM WASM runs inside the actual transferred geometry worker and keeps UV and weights',async()=>{
+ globalThis.Worker=NodeBrowserWorker;
+ const source=makeMesh(75),original=source.index.count;
+ try{
+  const task=optimizeInBackground(source,2500,{
+    method:'qem',attributeAware:true,qemError:.075,uvRepeat:16
+  });
+  const result=await task.promise;
+  assert.ok(result.geometry,result.reason);
+  assert.ok(result.triangles<original/3,'QEM must really reduce geometry inside Worker');
+  for(const k of ['uv','normal','skinIndex','skinWeight'])
+   assert.ok(result.geometry.getAttribute(k),'missing '+k);
+  assert.equal(source.index.count,original,'original shared source untouched');
+  assert.equal(result.method.includes('Meshoptimizer'),true);
+  result.geometry.dispose();
+ }finally{source.dispose();globalThis.Worker=nativeWorker}
+});
