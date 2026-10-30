@@ -58,24 +58,11 @@ class StudioWebActivity : Activity() {
 
     fun openTool(name: String) {
         if (name == "retarget") {
+            // The same saved workspace character is the Retarget input too.
+            // No second file chooser or "open with character" dialog.
             val current = bridge.latestActiveGlb()
-            if (current == null) {
-                launchNativeRetarget()
-            } else {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("Открыть персонажа в Retarget")
-                    .setMessage("Передать текущий GLB напрямую из Forge: " + current.name +
-                        "\nМодель и скелет будут загружены в Retarget без сохранения в Android.")
-                    .setPositiveButton("Открыть с персонажем") { _, _ ->
-                        launchNativeRetargetWorkspace(current)
-                    }
-                    .setNeutralButton("Сохранить и открыть") { _, _ ->
-                        openRetargetAfterExport = true
-                        exportFileToPicker(current)
-                    }
-                    .setNegativeButton("Отмена", null)
-                    .show()
-            }
+            if(current != null)launchNativeRetargetWorkspace(current)
+            else launchNativeRetarget()
             return
         }
         val next = if (name in setOf("character", "optimize")) name else "rig"
@@ -150,6 +137,14 @@ class StudioWebActivity : Activity() {
         // The native interface is available ONLY inside our packaged offline origin.
         web.addJavascriptInterface(bridge, "PhoenixNative")
         web.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view,url)
+                // Initial onResume can happen before Vite/Three initializes.
+                // Force a second activation at document ready so every tab
+                // sees the latest shared GLB, even after process recreation.
+                if(view != null && url?.startsWith("https://appassets.androidplatform.net/assets/studio/")==true)
+                    view.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))",null)
+            }
             override fun shouldInterceptRequest(
                 view: WebView?, request: WebResourceRequest?
             ): WebResourceResponse? {
@@ -290,15 +285,18 @@ class StudioWebActivity : Activity() {
         views[selected]?.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
     }
     override fun onBackPressed() {
-        if(selected == "character") {
-            openTool("rig")
-        } else if(selected == "rig") {
-            openTool("optimize")
-        } else {
-            // Optimize is the first step. Back must never navigate the
-            // invisible Rig WebView (which might contain unsaved edits).
-            super.onBackPressed()
+        // Android Back must run the SAME save-before-navigation contract as
+        // tapping a Forge tab. Opening a WebView directly discarded edits.
+        val destination=when(selected) {
+            "character" -> "rig"
+            "rig" -> "optimize"
+            else -> null
         }
+        if(destination!=null) {
+            views[selected]?.evaluateJavascript(
+                "window.PhoenixSuite?.navigateTo('$destination')",null
+            )
+        } else super.onBackPressed()
     }
     override fun onDestroy() {
         uploadCallback?.onReceiveValue(null)
