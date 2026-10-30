@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Worker as NodeWorker} from 'node:worker_threads';
 import * as THREE from 'three';
-import {optimizeInBackground,bakeNormalsInBackground} from './optimizer-background.js';
+import {optimizeInBackground,bakeNormalsInBackground,bakePbrInBackground} from './optimizer-background.js';
 
 function makeMesh(n){
  const pos=[],uv=[],j=[],w=[],index=[];
@@ -126,5 +126,41 @@ test('high-to-low normal baking can be cancelled with original geometry intact',
   job.cancel();
   await assert.rejects(job.promise,/отменено/);
   assert.equal(high.index.count,75*75*6);
+ }finally{high.dispose();low.dispose();globalThis.Worker=nativeWorker}
+});
+
+test('PBR color and transparency transfer inside real background Worker preserves geometry',async()=>{
+ globalThis.Worker=NodeBrowserWorker;
+ const high=makeMesh(15),low=makeMesh(5),size=32;
+ const pixels=new Uint8ClampedArray(size*size*4);
+ for(let i=0;i<size*size;i++){pixels[i*4]=91;pixels[i*4+1]=122;pixels[i*4+2]=45;pixels[i*4+3]=168}
+ const beforeHigh=high.index.count,beforeLow=low.index.count;
+ try{
+  const job=bakePbrInBackground(high,low,{size,sources:[{
+   key:'map',width:size,height:size,pixels,repeat:[1,1],offset:[0,0],
+   wrapS:'clamp',wrapT:'clamp',channel:0
+  }]});
+  const out=await job.promise;
+  assert.equal(out.maps.length,1);
+  assert.ok(out.hitCount>900,'BVH projects onto high-poly surface');
+  assert.equal(out.maps[0].pixels[(11*size+11)*4+3],168);
+  assert.equal(high.index.count,beforeHigh);
+  assert.equal(low.index.count,beforeLow);
+  assert.equal(pixels[3],168,'original source texture unchanged');
+ }finally{high.dispose();low.dispose();globalThis.Worker=nativeWorker}
+});
+test('PBR Worker cancellation leaves both meshes and input texture untouched',async()=>{
+ globalThis.Worker=NodeBrowserWorker;
+ const high=makeMesh(70),low=makeMesh(10);
+ const pixels=new Uint8ClampedArray(64*64*4).fill(203);
+ try{
+  const job=bakePbrInBackground(high,low,{size:64,sources:[{
+   key:'map',width:64,height:64,pixels,repeat:[1,1],offset:[0,0],
+   wrapS:'clamp',wrapT:'clamp',channel:0
+  }]});
+  job.cancel();
+  await assert.rejects(job.promise,/отменено/);
+  assert.equal(high.index.count,70*70*6);
+  assert.equal(pixels[0],203);
  }finally{high.dispose();low.dispose();globalThis.Worker=nativeWorker}
 });
