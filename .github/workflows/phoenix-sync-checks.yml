@@ -1,0 +1,122 @@
+name: Phoenix Character Forge - Integration Checks
+on:
+  push:
+    branches: [integration/phoenix-character-suite]
+    paths:
+      - 'integration/**'
+      - '.github/workflows/phoenix-sync-checks.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'integration/**'
+      - '.github/workflows/phoenix-sync-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check shared navigation and synchronization JS syntax
+        run: |
+          node --check integration/web/studio-shell.js
+          node --check integration/web/studio-sync.js
+          node --test integration/tests/flow-sync.test.cjs
+          node --check integration/web/studio-sync.js
+      - name: Validate the real anatomical Character module (not old prototype)
+        run: |
+          git clone --depth 1 --branch feature/forge77-anatomy-skin-and-sync-20261028 https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/forge-woman
+          test -s /tmp/forge-woman/src/rig-anatomy.js
+          test -s /tmp/forge-woman/src/retarget-compat.js
+          grep -q 'id="body-skin"' /tmp/forge-woman/src/main.js
+          cd /tmp/forge-woman
+          npm install --no-audit --no-fund
+          npm test
+          npm run build -- --base=./
+      - name: Test and compile Geometry Optimizer
+        working-directory: integration/optimizer
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+          test -s dist/index.html
+      - name: Run offline integration tests
+        run: python3 -m unittest discover -s integration/tests -v
+      - name: Verify Rust-free native bridge interface contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          kotlin = Path("integration/kotlin/StudioWebActivity.kt").read_text()
+          web = Path("integration/web/studio-sync.js").read_text()
+          for method in ("getActiveFileJson", "beginSave", "appendSaveChunk", "finishSave", "cancelSave"):
+              assert ("fun " + method) in kotlin, method
+              assert ("bridge." + method + "(") in web, method
+          print("Native/WebView synchronization contract OK")
+          PY
+
+  android-native-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build real optimizer assets for native smoke APK
+        working-directory: integration/optimizer
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+      - name: Extract checked native Retarget sources
+        shell: bash
+        run: |
+          base64 -d payload/AnimRetargetAndroid_sources.b64 > /tmp/retarget.tar.bz2
+          echo '18c9b6025a2567c4f2a004aab12213c2d1b26649c258427375bef6ef350e9f56  /tmp/retarget.tar.bz2' | sha256sum -c -
+          tar -xjf /tmp/retarget.tar.bz2
+          python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
+          python3 integration/patch_native_retarget_handoff.py AnimRetargetAndroid
+      - name: Prepare temporary native Retarget code review
+        run: |
+          mkdir -p integration-review
+          find AnimRetargetAndroid/app/src/main -name MainActivity.kt -print -exec cp {} integration-review/MainActivity.kt \;
+      - name: Upload temporary native Retarget code review
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixNativeRetargetSourceReview
+          path: integration-review/MainActivity.kt
+          retention-days: 1
+      - name: Inject minimal local WebView assets (build-only validation)
+        run: |
+          mkdir -p /tmp/rig-build /tmp/character-build
+          printf '<html><head><title>Rig Animation Studio</title></head><body>Rig CI placeholder</body></html>' > /tmp/rig-build/create.html
+          printf '<html><head><title>Character Studio</title></head><body>Character CI placeholder</body></html>' > /tmp/character-build/index.html
+          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/rig-build /tmp/character-build integration/optimizer/dist
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+      - name: Ensure Android SDK is present
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-34' 'build-tools;34.0.0'
+      - name: Compile native synchronization bridge (not a release APK)
+        working-directory: AnimRetargetAndroid
+        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Validate test APK packaging
+        shell: bash
+        run: |
+          APK="AnimRetargetAndroid/app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_HOME/build-tools/34.0.0/zipalign" -c -v 4 "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose "$APK"

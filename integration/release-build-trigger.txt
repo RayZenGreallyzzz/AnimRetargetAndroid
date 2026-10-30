@@ -1,0 +1,64 @@
+Phoenix Character Forge full test APK build
+Release draft input: phoenix-rig-v7.6-input
+Original APK asset: Rig-Animation-Studio-v7.6-Chest-Guard-test.1.apk
+Expected SHA256: 3e36c900a2746dd3cc4b2a71e8a295d6ec72dfcee892940910e3cc1c6fbc6243
+Includes: Rig 7.6 Chest Guard, Character Studio, Anim Retarget and Optimize.
+
+Attempt 2: request write-scope GitHub workflow token to access draft release.
+
+Rebuild 2026-10-27: BindPose-adaptive skinning capsules + opt-in clothing repair, regressions covered.
+
+Rebuild: separate install ID .suitecaps, no overwrite of prior .suite data; test-only signing.
+
+Build Woman profile: Human → Woman → Humanoid; breast/tail/wings/ears switchable, 16 skinned GLB combinations, 2026-10-27.
+
+2026-10-28: anatomy anchored Character Studio and skin mask tests; compile with fix/anatomical-anchors-and-skinning.
+
+Retry: corrected landmark scale when skinned geometry absent (head, ears, hair).
+
+Final 2026-10-28 anatomy trial: matched bind pose capsules, real Character Studio symmetrical bones + breast skin, correct Woman GLB world-space preset.
+
+2026-10-28 Forge protected-Woman test: Character ref feature/forge77-anatomy-skin-and-sync-20261028; explicit body mesh selection; torso-only breast weighting; validated GLB motion donor; unchanged Rig v7.6 + Optimize + native Retarget. Preserve separate .suitecaps installation.
+
+2026-10-28 surface islands update: Character branch feature/forge77-anatomy-skin-and-sync-20261028; mesh-islands connected-component body selector + visual highlight + anatomical weights restricted to selected skin component. Test separate-garment island and UV seams. Keep Rig v7.6 SHA, native Retarget and Optimize unchanged.
+
+Final Islands package isolation: build installation suffix .suiteislands, keeping previous .suite and .suitecaps apps intact. Same verified original Rig 7.6 asset.
+
+2026-10-29 test: Phoenix Forge cloth-paint brush, geodesic UV-safe vertex mask, GLB+PCS metadata, protected extra bone weights, 120k-vertex Android safeguard. Exact original Rig 7.6 preserved, Character Studio feature/forge77-anatomy-skin-and-sync-20261028.
+
+2026-10-29: Optimizer capsule correction consumes Character pcsClothMask via validated run-length ranges; protected skin weights/indices immutable; wrong signatures blocked; mesh decimation prohibited when mask exists; added regression tests. Preserve Rig 7.6 and other editor components.
+
+2026-10-29 Forge Retarget Sync: take the current GLB directly from private phoenix_workspace into original MainActivity without SAF; preserve FBX+GLB import paths. Optimizer honors pcsClothMask from Character; separate application ID .suitertsync to protect older test installs. Python tests and Android CI required.
+
+2026-10-29 QA hotfix: full vertex/index cloth-mask hash v2 in Character and Optimizer, block stale masks, regression tests 1001-vertex hidden edit and malformed positions; preserve direct Retarget private handoff. Build separate signed APK for regression testing; older masks v1 require repaint.
+
+2026-10-29 QA2 signed APK release: unique applicationIdSuffix .suiteqav2 prevents debug signature collision with prior .suitertsync; include mask v2 signatures and direct Retarget handoff. No automatic migration of old private-workspace files.
+
+2026-10-29 Optimizer QA3: adaptive budget refinement measured 198450 -> 20402 triangles for 20k target, curvy mesh 0 inverted face and 1.17% displacement, checked GLB skeleton+UV+clip export, preserve textures by default, low-RAM tab release control, explicit v1 mask review in Character. Isolated Android package .suiteoptqa3. Full signed build and test required.
+
+2026-10-30 Auto Handoff QA4: Start Optimize, accept selected GLB in one shared workspace even when original editor uses synthetic change, ensure Optimize save/commit finishes before Rig launch, order Optimize->Rig->Character->Retarget, lower Woman breast defaults, adjustable chest bone position and rebuilt bind matrices, verify 16 Woman variants and moving-root test. Preserve old signed builds via separate package .suiteflowqa4.
+
+2026-10-30 unified shared-flow FINAL QA4: Optimize first; import a GLB once; auto-publish via JS input (trusted or app-generated except workspace), commit GLB before opening Rig; Character save+Retarget; no unsaved Rig edit silently transferred; Woman breast default roots lowered by 9 cm, 3 adjustable bind-pose sliders with inverse-bind reconstruction; JS sync + 16-rig transform tests; isolated package .suiteflowqa4. Validate signed full APK.
+
+2026-10-30 Shared Flow QA4 verified slider persistence + browser fetch GLB adjustment test, single-import sync regression, one-click save to Rig and Retarget. Build from latest integration SHA with independent app package .suiteflowqa4; do not replace user's existing rig apps.
+
+2026-10-30 Heavy Mesh QA5 screenshot fix: no arbitrary 260000 triangle input or algorithm limit; cancellable module WebWorker receives transferrable geometry, holds source intact and shows passes; memory-estimate safety on 4GB Android; target applies per selected mesh; regression 273800→18050 for 20000 target with UV+skin preserved, 19/19 optimizer tests; isolated .suitebigqa5 build.
+
+2026-10-30 Original red-haired girl gltfpack analysis: 1,036,252 triangles, 563,288 vertices, one non-skinned mesh, three 2048 WebP textures, no bones/clips/morphs, one atlas UV remapped ×16; source file remains private (never uploaded to GitHub). Fix gltfpack InterleavedBufferAttribute in worker, strict texture-texel UV protection, no false Tripo equivalence, separate QA6 .suitetripoqa6 package.
+
+2026-10-30 QEM QA7 full Android APK release: meshoptimizer 1.3.0 offline WebAssembly QEM with UV/normal-aware error, selectable strength, original clustering fallback; synthetic gltfpack-style atlas ×16 1,051,250 -> 300,000 triangles (1.49s CI runner), 26 optimizer tests successful, 25 Character tests, original Rig 7.6 unchanged, separate install package .suiteqemqa7. Preserve original model, no Tripo-equivalence claim.
+
+2026-10-30 Detail Guard QA8: user-requested actual Tripo red-haired GLB (1,036,252 triangles) independently verified offline with QEM QA7: 299,998 triangles, 177,693 vertices, ~2.6 sec on CI-like Node worker, 3 WebP textures preserved; user file kept private in session. Add tap-to-protect spheres for face/hair/belts, explicit vertex locks, QEM fail-closed if any locked vertex lost, test 30/30, distinct Android package .suitedetailqa8. Not Tripo semantic retopology, no promise of visually identical face until on-device comparison.
+
+2026-10-30 Normal Bake QA9: offline BVH tangent-space high-to-low normal map with 128/256/512px presets, worker cancellation and safe original restore, PNG/GLB material export; explicit opt-in to replace original Tripo normalTexture; preserve ×16 UV atlas texture transform; source real red-haired original already has normal map; do not claim Tripo full texture bake. Isolated Android package .suitebakeqa9.
+
+2026-10-30 QA9 CI verification correction: normal-bake.js and normal-bake-ui.js live in optimizer root, not src/; rerun full signed APK build with same feature scope and test gates.
+
+2026-10-30 Video QA10: User Android video 1000031962.mp4 (~148s) confirms QEM target 45000 achieved 44992 from 744128 on 419114-vertex blonde model. Fix live mesh chooser counts after preview/compare, clear ДО/ПОСЛЕ labels, make manual target and preset match, show inline normal-map blocker when model already has map and checkbox not enabled; PNG remains disabled until real bake. Three regression tests for inline warning. Distinct install .suitevideofix10; no new rig or PBR baking features claimed.
+
+2026-10-30 Forge PBR QA11: optional high-poly to low-poly RGBA color/alpha, MR, AO UV0, emissive projection, actual Worker unit tests and safe cancellation; source original UV and textures retained by default; opt-in PBR maps at 128/256/512, single mesh/material, texture 4k/80MiB safety, overlap/failure rejection, accurate geometry+material before/after comparison, optional PNG and GLB export, isolated app package .suitepbrqa11. Build and sign APK; no claim of Tripo semantic retopology.
+
+2026-10-31 Phoenix Forge ONE (shared-character integration, not new optimizer feature).
+Fix: JS sync now auto-checkouts newer active GLB on WebView reactivation unless editor has unsaved work. Native open Retarget auto-passes current saved GLB; Retarget results explicitly promote chosen GLB back with monotonically increasing workspace revision. Rig 7.6 emits GLB using bundled original Capacitor RigFileExport, so patch BOTH original exporter assets to save through PhoenixSuite.saveBlob, retaining FBX export native. Optimize/Character expose save-only APIs. All top navigation and Android Back use save-before-switch and block stale transitions. Show shared character filename+revision banner; package suffix .suiteone and label Phoenix Forge ONE. Native compile and real APK assets must be verified, and no claims of live in-memory scene sharing or automatic unsaved rig preservation.
+
+2026-10-31 Phoenix Forge ONE release gate repair: GitHub Actions plain YAML run unexpectedly folded hotfix and Retarget patch into one command. Split to explicit shell block and fail-closed verification; rebuild full APK and confirm Retarget GLB output into shared workspace. This is a real previously missing binary integration fix.

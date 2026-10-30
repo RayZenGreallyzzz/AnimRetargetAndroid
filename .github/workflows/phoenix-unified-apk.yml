@@ -1,0 +1,217 @@
+name: Phoenix Character Forge - exact Rig Studio 7.6 APK
+on:
+  # Full builds run from this integration branch, so the main branch stays untouched.
+  # After the verified release asset is uploaded, updating the trigger file
+  # starts an APK build without any UI workflow-dispatch dependency.
+  push:
+    branches: [integration/phoenix-character-suite]
+    paths:
+      - 'integration/release-build-trigger.txt'
+  workflow_dispatch:
+    inputs:
+      character_ref:
+        description: 'Character Studio source ref'
+        required: true
+        default: 'feature/forge77-anatomy-skin-and-sync-20261028'
+        type: string
+
+# GitHub's Draft Releases are hidden from ordinary read-only workflow identities.
+# Limit write scope to this explicitly triggered full build (not PR checks).
+permissions:
+  contents: write
+
+jobs:
+  unified-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Anim Retarget
+        uses: actions/checkout@v4
+
+      - name: Fetch Character Studio copy (original stays untouched)
+        env:
+          CHARACTER_REF: ${{ inputs.character_ref || 'feature/forge77-anatomy-skin-and-sync-20261028' }}
+        run: |
+          git clone --depth 1 --branch "$CHARACTER_REF" https://github.com/RayZenGreallyzzz/Character-Studio.git /tmp/phoenix-character
+          echo "Character source SHA: $(git -C /tmp/phoenix-character rev-parse HEAD)" > /tmp/phoenix-source-revisions.txt
+
+      - name: Download exact Rig Studio v7.6 APK from pinned private draft or release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RIG_RELEASE_TAG: phoenix-rig-v7.6-input
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          curl --fail --show-error --silent --location --retry 3 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$API/releases?per_page=100" -o /tmp/phoenix-release.json
+          ASSET_ID="$(python3 integration/find_rig_release_asset.py /tmp/phoenix-release.json)"
+          curl --fail --show-error --silent --location --retry 3 --max-time 600 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/octet-stream" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API/releases/assets/$ASSET_ID" -o /tmp/rig-studio-v76.apk
+          echo "rig_release_name=$RIG_RELEASE_TAG" >> /tmp/phoenix-source-revisions.txt
+          echo "rig_asset_id=$ASSET_ID" >> /tmp/phoenix-source-revisions.txt
+          echo "rig_apk_sha256=$(sha256sum /tmp/rig-studio-v76.apk | cut -d' ' -f1)" >> /tmp/phoenix-source-revisions.txt
+          python3 integration/extract_rig_v76.py /tmp/rig-studio-v76.apk /tmp/phoenix-rig/dist
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Test and build Character Studio web module
+        working-directory: /tmp/phoenix-character
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          test -s src/retarget-compat.js
+          test -s src/mesh-islands.js
+          test -s src/cloth-protection.js
+          test -s src/cloth-brush.js
+          grep -q 'id="cloth-paint-toggle"' src/main.js
+          grep -q 'id="body-surface"' src/main.js
+          grep -q 'id="body-skin"' src/main.js
+          grep -q 'id="character-next"' src/main.js
+          grep -q 'window.PhoenixCharacterSave=' src/main.js
+          npm run build -- --base=./
+          test -s dist/index.html
+
+      - name: Test and build offline Geometry Optimizer
+        working-directory: integration/optimizer
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+          test -s dist/index.html
+          test -s normal-bake.js
+          test -s normal-bake-ui.js
+          test -s pbr-bake.js
+          test -s pbr-bake-ui.js
+          grep -R -q 'bake-normal' dist/assets
+          grep -R -q 'pbr-bake' dist/assets
+
+      - name: Test unified tabs and manifest injector
+        run: |
+          node --check integration/web/studio-shell.js
+          node --check integration/web/studio-sync.js
+          node --test integration/tests/flow-sync.test.cjs
+          python3 -m unittest integration.tests.test_rig_shared_export -v
+          python3 -m unittest discover -s integration/tests -v
+
+      - name: Verify and extract original Anim Retarget Kotlin sources
+        shell: bash
+        run: |
+          test -s payload/AnimRetargetAndroid_sources.b64
+          base64 -d payload/AnimRetargetAndroid_sources.b64 > /tmp/animretarget-source.tar.bz2
+          echo '18c9b6025a2567c4f2a004aab12213c2d1b26649c258427375bef6ef350e9f56  /tmp/animretarget-source.tar.bz2' | sha256sum -c -
+          tar -xjf /tmp/animretarget-source.tar.bz2
+          test -f AnimRetargetAndroid/app/src/main/AndroidManifest.xml
+          test -f AnimRetargetAndroid/app/build.gradle.kts
+
+      - name: Apply BVH hotfix and native Retarget shared-character patch
+        run: |
+          set -euo pipefail
+          python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
+          python3 integration/patch_native_retarget_handoff.py AnimRetargetAndroid
+
+      - name: Verify native Retarget can promote GLB back into Forge
+        run: |
+          grep -R -q 'confirmRetargetResultForForge' AnimRetargetAndroid/app/src/main
+          grep -R -q 'В общий Forge' AnimRetargetAndroid/app/src/main
+      - name: Use original Rig menu as unified default tab
+        run: |
+          python3 -m py_compile integration/inject_shell.py
+          python3 integration/inject_shell.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist integration/optimizer/dist
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/optimize/index.html
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
+          python3 integration/woman_rig_patch.py AnimRetargetAndroid/app/src/main/assets/studio/rig
+          python3 integration/patch_rig_shared_export.py AnimRetargetAndroid/app/src/main/assets/studio/rig
+          test "$(grep -l 'PhoenixSuite.saveBlob(t,n)' AnimRetargetAndroid/app/src/main/assets/studio/rig/assets/*.js | wc -l)" -ge 2
+          grep -q 'Персонаж:' AnimRetargetAndroid/app/src/main/assets/studio/optimize/studio-shell.js
+          grep -q 'revision !== lastRevision' AnimRetargetAndroid/app/src/main/assets/studio/rig/studio-sync.js
+          grep -R -q 'PhoenixCharacterSave' AnimRetargetAndroid/app/src/main/assets/studio/character/assets
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/rigs/rig-woman-1000.glb
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/phoenix-woman-ui.js
+          grep -q 'phoenix-woman-bone-options' AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
+          python3 integration/woman_profile_verify.py AnimRetargetAndroid/app/src/main/assets/studio/rig
+          node --check integration/web/phoenix-woman-ui.js
+          node --check integration/web/phoenix-woman-rig-transform.js
+          PHOENIX_RIG_DIR=AnimRetargetAndroid/app/src/main/assets/studio/rig/rigs node --test integration/tests/woman_rig_transform.test.cjs
+
+      - name: Isolate the surface-islands test build from all previous Android installs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          gradle = Path("AnimRetargetAndroid/app/build.gradle.kts")
+          content = gradle.read_text(encoding="utf-8")
+          old = 'applicationIdSuffix = ".suite"'
+          assert content.count(old) == 1, "Unexpected original Android application suffix"
+          gradle.write_text(content.replace(old, 'applicationIdSuffix = ".suiteone"'), encoding="utf-8")
+          manifest = Path("AnimRetargetAndroid/app/src/main/AndroidManifest.xml")
+          ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+          tree = ET.parse(manifest)
+          namespace = "{http://schemas.android.com/apk/res/android}label"
+          app = tree.getroot().find("application")
+          assert app is not None
+          app.set(namespace, "Phoenix Forge ONE")
+          for activity in app.findall("activity"):
+              if activity.get("{http://schemas.android.com/apk/res/android}name") == "com.animretarget.app.StudioWebActivity":
+                  activity.set(namespace, "Phoenix Forge ONE")
+          tree.write(manifest, encoding="utf-8", xml_declaration=True)
+          PY
+          echo "android_application_suffix=.suiteone" >> /tmp/phoenix-source-revisions.txt
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1 | xargs -r -I{} sh -c 'yes | "{}" --licenses >/dev/null 2>&1 || true'
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          "$SDKMANAGER" 'platforms;android-34' 'build-tools;34.0.0'
+
+      - name: Build single offline APK
+        working-directory: AnimRetargetAndroid
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Verify APK signing and ZIP alignment before publishing
+        shell: bash
+        run: |
+          APK="AnimRetargetAndroid/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/zipalign" -c -v 4 "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose "$APK"
+
+      - name: Prepare source provenance
+        run: |
+          mkdir -p integration-output
+          cp /tmp/phoenix-source-revisions.txt integration-output/source-revisions.txt
+          sha256sum AnimRetargetAndroid/app/build/outputs/apk/debug/*.apk > integration-output/apk-sha256.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixCharacterForge-ONE-APK
+          path: AnimRetargetAndroid/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixCharacterForge-source-refs
+          path: integration-output/
+          retention-days: 30
