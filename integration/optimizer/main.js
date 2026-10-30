@@ -6,7 +6,7 @@ import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {describe,simplifyGeometry,getBindCapsules,guardSkinToCapsules} from './mesh-tools.js';
 import {readClothProtection} from './cloth-mask.js';
 import {paintDetailSphere,countLocked} from './detail-locks.js';
-import {optimizeInBackground} from './optimizer-background.js';
+import {optimizeInBackground,bakeNormalsInBackground} from './optimizer-background.js';
 import './style.css';
 
 const $=id=>document.getElementById(id);
@@ -36,7 +36,13 @@ const ui=[
 '<div class="buttons"><button id="simplify" class="primary">Предпросмотр удаления вершин</button><button id="undo">Отменить предпросмотр</button></div>',
 '<button id="compare" disabled>Сравнить: ДО / ПОСЛЕ</button>',
 '<p>Проверка UV учитывает размер текстуры и KHR_texture_transform. Цель 20 000 для сложного атласа может быть недостижима без перепекания текстур. Это кластеризация, а не полноценная ретопология Tripo.</p>',
-'<h3>02 / Объёмы костей и одежда</h3>',
+'<h3>02 / Запекание normal map (с тяжёлой модели на лёгкую)</h3>',
+'<p>После QEM-предпросмотра перенеси рельеф тяжёлой сетки в normal map. Работает офлайн, оригинальный GLB не меняется. Это не запекание цвета.</p>',
+'<label>Разрешение карты<select id="bake-size"><option value="128">128 px — быстро</option><option value="256" selected>256 px</option><option value="512">512 px — детальнее</option></select></label>',
+'<label>Глубина поиска поверхности<select id="bake-depth"><option value=".012">1,2% диагонали</option><option value=".035" selected>3,5% диагонали</option><option value=".08">8% диагонали</option></select></label>',
+'<div class="buttons"><button id="bake-normal" class="primary">🧩 Запечь normal map</button><button id="bake-download" disabled>PNG карты</button></div>',
+'<p id="bake-status">Нужны исходный и облегчённый меш с UV. Начни с 256 px.</p>',
+'<h3>03 / Объёмы костей и одежда</h3>',
 '<label>Кость<select id="bones"></select></label>',
 '<label>Радиус капсул: <span id="radius-value">1.00</span>×<input id="radius" type="range" min=".4" max="2.8" step=".1" value="1"/></label>',
 '<label class="toggle"><input id="capsules" type="checkbox" checked/> Показывать капсулы вокруг костей</label>',
@@ -44,7 +50,7 @@ const ui=[
 '<label class="toggle"><input id="reassign" type="checkbox"/> Исправить совсем чужие кости на одежде (осторожно)</label>',
 '<div class="buttons"><button id="guard">Предпросмотр защиты весов</button><button id="apply" class="primary">Применить</button></div>',
 '<p>Радиусы капсул рассчитываются в BindPose. Если на меше есть маска защиты одежды из Character, отмеченные вершины никогда не меняют веса. Повреждённая маска блокирует коррекцию. Исправление чужих костей выключено по умолчанию.</p>',
-'<h3>03 / Результат</h3><div id="status"></div>',
+'<h3>04 / Результат</h3><div id="status"></div>',
 '<div class="buttons"><button id="export" class="primary">Экспорт отдельного GLB</button><button id="reset">Восстановить исходник</button></div>',
 '<button id="opt-next-rig" class="primary">✅ Сохранить эту модель → Rig</button>',
 '<p>Сохраняются UV, материалы, привязка и клипы. Не перезаписывай исходную модель до проверки результата.</p>',
@@ -64,7 +70,8 @@ const grid=new THREE.GridHelper(8,16,0x3e4858,0x3e4858);scene.add(grid);
 const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const exporter=new GLTFExporter();
 let character=null,animations=[],meshes=[],pending=null,playing=false,mixer=null;
-let activeOptimization=null;
+let activeOptimization=null,activeBake=null;
+const bakedMaterials=new Map();
 const originals=new Map(),capsuleGroup=new THREE.Group();
 let weightDots=null,wireOverlay=null;
 const detailMasks=new WeakMap();let detailPainting=false,detailOverlay=null;
