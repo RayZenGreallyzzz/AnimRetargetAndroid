@@ -18,6 +18,7 @@ const ui=[
 '<label>Меш<select id="meshes"></select></label>',
 '<label>Цель: треугольники<select id="presets"><option value="5000">5 000</option><option value="10000">10 000</option><option value="20000" selected>20 000</option><option value="40000">40 000</option><option value="custom">Своя</option></select></label>',
 '<label>Своя цель<input id="target" type="number" value="20000" min="64" step="100"/></label>',
+'<label>Способ упрощения<select id="method"><option value="qem">QEM — сохранить UV и веса без пересчёта (рекомендуется)</option><option value="cluster">Кластеризация — экспериментальная</option></select></label>',
 '<p>Цель действует на выбранный меш, не на весь GLB. Волосы, одежда и тело могут быть разными мешами. Общее число треугольников смотри в статистике.</p>',
 '<label class="toggle"><input id="uv" type="checkbox" checked/> Защищать UV и текстуры</label>',
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
@@ -289,6 +290,7 @@ $('simplify').onclick=async()=>{
   try{
     job=optimizeInBackground(mesh.geometry,target,{
       preserveUV:$('uv').checked,protectSkin:$('joint').checked,
+      method:$('method').value,qemError:0.025,
       ...textureSafety(mesh)
     },(attempt,total)=>{
       msg('Оптимизация меша: проход '+attempt+' из примерно '+total+
@@ -304,7 +306,7 @@ $('simplify').onclick=async()=>{
     $('compare').disabled=false;
     $('compare').textContent='Сравнение: ПОСЛЕ (показать ДО)';
     selectedStats();updateCapsules();
-    msg('Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
+    msg((result.method?.includes('Meshoptimizer')?'QEM: ':'Кластеризация: ')+'Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
       ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+
       '%; макс. сдвиг вершин '+result.maxMovementPercent+'% диагонали, UV до '+
