@@ -115,6 +115,10 @@ jobs:
         run: python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
           python3 integration/patch_native_retarget_handoff.py AnimRetargetAndroid
 
+      - name: Verify native Retarget can promote GLB back into Forge
+        run: |
+          grep -R -q 'confirmRetargetResultForForge' AnimRetargetAndroid/app/src/main
+          grep -R -q 'В общий Forge' AnimRetargetAndroid/app/src/main
       - name: Use original Rig menu as unified default tab
         run: |
           python3 -m py_compile integration/inject_shell.py
@@ -124,7 +128,10 @@ jobs:
           test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
           python3 integration/woman_rig_patch.py AnimRetargetAndroid/app/src/main/assets/studio/rig
           python3 integration/patch_rig_shared_export.py AnimRetargetAndroid/app/src/main/assets/studio/rig
-          grep -Rl 'PhoenixSuite.saveBlob(t,n)' AnimRetargetAndroid/app/src/main/assets/studio/rig/assets
+          test "$(grep -l 'PhoenixSuite.saveBlob(t,n)' AnimRetargetAndroid/app/src/main/assets/studio/rig/assets/*.js | wc -l)" -ge 2
+          grep -q 'Персонаж:' AnimRetargetAndroid/app/src/main/assets/studio/optimize/studio-shell.js
+          grep -q 'revision !== lastRevision' AnimRetargetAndroid/app/src/main/assets/studio/rig/studio-sync.js
+          grep -R -q 'PhoenixCharacterSave' AnimRetargetAndroid/app/src/main/assets/studio/character/assets
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/rigs/rig-woman-1000.glb
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/phoenix-woman-ui.js
           grep -q 'phoenix-woman-bone-options' AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
@@ -143,20 +150,20 @@ jobs:
           content = gradle.read_text(encoding="utf-8")
           old = 'applicationIdSuffix = ".suite"'
           assert content.count(old) == 1, "Unexpected original Android application suffix"
-          gradle.write_text(content.replace(old, 'applicationIdSuffix = ".suitepbrqa11"'), encoding="utf-8")
+          gradle.write_text(content.replace(old, 'applicationIdSuffix = ".suiteone"'), encoding="utf-8")
           manifest = Path("AnimRetargetAndroid/app/src/main/AndroidManifest.xml")
           ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
           tree = ET.parse(manifest)
           namespace = "{http://schemas.android.com/apk/res/android}label"
           app = tree.getroot().find("application")
           assert app is not None
-          app.set(namespace, "Phoenix Forge PBR QA11")
+          app.set(namespace, "Phoenix Forge ONE")
           for activity in app.findall("activity"):
               if activity.get("{http://schemas.android.com/apk/res/android}name") == "com.animretarget.app.StudioWebActivity":
-                  activity.set(namespace, "Phoenix Forge PBR QA11")
+                  activity.set(namespace, "Phoenix Forge ONE")
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
           PY
-          echo "android_application_suffix=.suitepbrqa11" >> /tmp/phoenix-source-revisions.txt
+          echo "android_application_suffix=.suiteone" >> /tmp/phoenix-source-revisions.txt
 
       - uses: actions/setup-java@v4
         with:
@@ -195,7 +202,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixCharacterForge-PBRQA11-APK
+          name: PhoenixCharacterForge-ONE-APK
           path: AnimRetargetAndroid/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
