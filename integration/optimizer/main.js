@@ -509,7 +509,7 @@ $('guard').onclick=()=>{
 $('apply').onclick=apply;
 $('undo').onclick=cancelPending;
 $('reset').onclick=restore;
-async function commitOptimizedToRig(){
+async function saveOptimizeToShared(){
  if(normalBaker.isBusy()||pbrBaker.isBusy())return false;
  if(activeOptimization){msg('Сначала закончи или отмени расчёт оптимизации.');return false}
  if(!character){msg('Сначала загрузи модель GLB.');return false}
@@ -524,14 +524,19 @@ async function commitOptimizedToRig(){
   if(!(output instanceof ArrayBuffer))throw Error('GLB не сформирован.');
   const saved=await window.PhoenixSuite.saveBlob(new Blob([output],{type:'model/gltf-binary'}),'Forge_Optimize_To_Rig.glb');
   if(!saved)throw Error('Не удалось передать GLB');
-  msg('GLB сохранён в общие файлы. Открываю Rig с этим персонажем.');
-  window.PhoenixNative?.openTool('rig');
+  msg('Общий персонаж обновлён: скелет, UV, материалы и клипы сохранены.');
   return true;
  }catch(error){
   msg('Передача в Rig отменена: '+error.message);
   return false;
  }
 }
+async function commitOptimizedToRig(){
+  const saved=await saveOptimizeToShared();
+  if(saved)window.PhoenixNative?.openTool('rig');
+  return saved;
+}
+window.PhoenixOptimizeSave=saveOptimizeToShared;
 window.PhoenixOptimizeCommit=commitOptimizedToRig;
 $('opt-next-rig').onclick=commitOptimizedToRig;
 $('export').onclick=async()=>{
