@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {simplifyGeometry} from './mesh-tools.js';
 import {simplifyQEM} from './meshopt-qem.js';
+import {bakeNormalPixels} from './normal-bake.js';
 
 function packGeometry(g){
  const attributes={};const transfers=[];
@@ -14,7 +15,27 @@ function packGeometry(g){
  if(index)transfers.push(index.buffer);
  return {data:{attributes,index,groups:g.groups.map(x=>({...x}))},transfers};
 }
+function decodeGeometry(raw){
+ const {attributes,index,groups}=raw;
+ const g=new THREE.BufferGeometry();
+ for(const [name,a] of Object.entries(attributes))
+  g.setAttribute(name,new THREE.BufferAttribute(a.array,a.itemSize,a.normalized));
+ if(index)g.setIndex(new THREE.BufferAttribute(index,1));
+ for(const gr of groups||[])g.addGroup(gr.start,gr.count,gr.materialIndex);
+ return g;
+}
 self.onmessage=async e=>{
+ if(e.data?.kind==='bakeNormals'){
+  let high=null,low=null;
+  try{
+   high=decodeGeometry(e.data.high);
+   low=decodeGeometry(e.data.low);
+   const result=bakeNormalPixels(high,low,e.data.options);
+   self.postMessage({kind:'normalDone',result},[result.pixels.buffer]);
+  }catch(error){self.postMessage({kind:'error',message:error?.message||String(error)})}
+  finally{high?.dispose();low?.dispose()}
+  return;
+ }
  if(e.data?.kind!=='simplify')return;
  let g=null,result=null;
  try{
