@@ -32,7 +32,7 @@ export function bakeNormalPixels(high,low,{size=256,repeat=[1,1],offset=[0,0],ma
    ab=new THREE.Vector3(),ac=new THREE.Vector3(),n=new THREE.Vector3(),
    surf=new THREE.Vector3(),lowNormal=new THREE.Vector3(),highNormal=new THREE.Vector3(),
    tangent=new THREE.Vector3(),bitangent=new THREE.Vector3(),scratch=new THREE.Vector3(),
-   ray=new THREE.Ray(),seed=new THREE.Vector3(),pA=new THREE.Vector3(),
+   ray=new THREE.Ray(),seed=new THREE.Vector3(),pixelTangent=new THREE.Vector3(),pA=new THREE.Vector3(),
    pB=new THREE.Vector3(),pC=new THREE.Vector3(),bc=new THREE.Vector3();
  const triangles=low.index?.count||lp.count;
  const hiIdx=high.index;
@@ -95,11 +95,11 @@ export function bakeNormalPixels(high,low,{size=256,repeat=[1,1],offset=[0,0],ma
     ).normalize();
    }else lowNormal.copy(n);
    // Tangent frame must be orthonormal with interpolated shading normal.
-   tangent.addScaledVector(lowNormal,-lowNormal.dot(tangent)).normalize();
-   bitangent.crossVectors(lowNormal,tangent).multiplyScalar(sign).normalize();
+   pixelTangent.copy(tangent).addScaledVector(lowNormal,-lowNormal.dot(tangent)).normalize();
+   bitangent.crossVectors(lowNormal,pixelTangent).multiplyScalar(sign).normalize();
    let hit=null;
    seed.copy(surf).addScaledVector(lowNormal,maxDist);
-   ray.set(seed,lowNormal.clone().negate());
+   ray.origin.copy(seed);ray.direction.copy(lowNormal).negate();
    hit=bvh.raycastFirst(ray,THREE.DoubleSide,0,maxDist*2);
    if(!hit){
     seed.copy(surf).addScaledVector(lowNormal,-maxDist);
@@ -111,7 +111,7 @@ export function bakeNormalPixels(high,low,{size=256,repeat=[1,1],offset=[0,0],ma
    hitCount++;
    sampleNormal(hit.faceIndex,hit.point,highNormal);
    if(highNormal.dot(lowNormal)<0)highNormal.negate(); // double-sided meshes
-   const xT=highNormal.dot(tangent),yT=highNormal.dot(bitangent),zT=highNormal.dot(lowNormal);
+   const xT=highNormal.dot(pixelTangent),yT=highNormal.dot(bitangent),zT=highNormal.dot(lowNormal);
    const norm=Math.hypot(xT,yT,zT)||1,ofs=slot*4;
    color[ofs]=Math.round(127.5+127.5*xT/norm);
    color[ofs+1]=Math.round(127.5+127.5*yT/norm);
