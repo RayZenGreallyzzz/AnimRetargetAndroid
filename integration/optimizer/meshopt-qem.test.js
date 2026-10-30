@@ -117,7 +117,7 @@ test('million-triangle stress: offline QEM processes Tripo-size geometry while r
 test('protected detail brush keeps selected face/hair vertices through QEM',async()=>{
  const original=makeGrid(90),p=original.getAttribute('position');
  const mask=new Uint8Array(p.count);
- const changed=paintDetailSphere(original,mask,{x:.5,y:.7,z:.02},.075,true);
+ const changed=paintDetailSphere(original,mask,{x:.5,y:.7,z:.02},.12,true);
  assert.ok(changed>100&&changed<2000,'local face protection must be selective');
  assert.equal(countLocked(mask),changed);
  const before=new Set();
