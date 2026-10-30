@@ -111,8 +111,10 @@ jobs:
           test -f AnimRetargetAndroid/app/src/main/AndroidManifest.xml
           test -f AnimRetargetAndroid/app/build.gradle.kts
 
-      - name: Apply existing BVH hotfix
-        run: python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
+      - name: Apply BVH hotfix and native Retarget shared-character patch
+        run: |
+          set -euo pipefail
+          python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
           python3 integration/patch_native_retarget_handoff.py AnimRetargetAndroid
 
       - name: Verify native Retarget can promote GLB back into Forge
