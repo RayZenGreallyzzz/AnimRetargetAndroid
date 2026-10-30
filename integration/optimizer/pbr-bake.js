@@ -140,7 +140,11 @@ export function bakePbrPixels(high,low,{
    matched[slot]=1;hitCount++;
   }
  }
- const matchRate=hitCount/Math.max(1,hitCount+missCount);
+ const totalSamples=hitCount+missCount;
+ if(overlapCount>Math.max(16,totalSamples*.05))
+  throw Error('Запекание отменено: найдено много наложенных UV-островов ('+overlapCount+
+   ' пересечений). Нужна новая UV-развёртка, иначе изменится цвет соседних участков.');
+ const matchRate=hitCount/Math.max(1,totalSamples);
  if(matchRate<.95)throw Error('Запекание отменено: '+Math.round(matchRate*100)+
    '% соответствий, риск потерять цвет лица или одежды. Уменьши отклонение сетки.');
  // Small padding along UV island borders to prevent mipmap edge bleed.
