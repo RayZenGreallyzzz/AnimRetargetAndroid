@@ -22,21 +22,55 @@ export async function simplifyQEM(g,target,options={}){
   return {reason:'Цель должна быть в пределах 64..'+(triCount-1)+' треугольников.'};
  if(!!attrs.skinIndex!==!!attrs.skinWeight)return {reason:'У меша некорректная пара JOINTS/WEIGHTS.'};
  if(g.index?.count%3)return {reason:'Некорректный индексный буфер (неполные треугольники).'};
+ // Normalize POSITION to a unit box. gltfpack stores positions as uint16
+ // 0..16383 before a tiny node scale, so unnormalized QEM would undervalue
+ // UV/normals compared with massive position coordinates.
+ g.computeBoundingBox();
+ const bounds=g.boundingBox,lo=bounds.min,high=bounds.max;
+ const length=Math.max(high.x-lo.x,high.y-lo.y,high.z-lo.z,1e-7);
  const positions=new Float32Array(count*3);
  for(let i=0;i<count;i++){
   for(let k=0;k<3;k++){
    const v=pos.getComponent(i,k);
    if(!Number.isFinite(v))return {reason:'Нечисловые координаты вершин.'};
-   positions[i*3+k]=v;
+   const origin=k===0?lo.x:k===1?lo.y:lo.z;
+   positions[i*3+k]=(v-origin)/length;
   }
  }
  const indices=g.index?new Uint32Array(g.index.array):Uint32Array.from({length:count},(_,i)=>i);
  await MeshoptSimplifier.ready;
  const error=Math.max(.0001,Math.min(.3,Number(options.qemError)||.025));
- // QEM follows triangle topology; never recomputes UVs, normals or weights.
- const [reduced,metric]=MeshoptSimplifier.simplify(
-  indices,positions,3,Math.floor(target)*3,error,options.qemRegularize===false?[]:['Regularize']
- );
+ const flags=options.qemRegularize===false?[]:['Regularize'];
+ const useAttributes=options.attributeAware!==false&&(attrs.normal||attrs.uv);
+ let reduced,metric;
+ if(useAttributes){
+  const normal=attrs.normal,uv=attrs.uv;
+  const stride=(normal?3:0)+(uv?2:0),attributes=new Float32Array(count*stride);
+  const weights=[];
+  if(normal)weights.push(.6,.6,.6);
+  if(uv)weights.push(.4,.4);
+  const repeat=Math.max(1,Math.min(128,Number(options.uvRepeat)||1));
+  for(let i=0;i<count;i++){
+   let k=i*stride;
+   if(normal){
+    for(let c=0;c<3;c++){const v=normal.getComponent(i,c);attributes[k++]=Number.isFinite(v)?v:0}
+   }
+   if(uv){
+    for(let c=0;c<2;c++){
+     const v=uv.getComponent(i,c);
+     if(!Number.isFinite(v))return {reason:'Нечисловые UV: нельзя безопасно уменьшать сетку.'};
+     attributes[k++]=v*repeat;
+    }
+   }
+  }
+  [reduced,metric]=MeshoptSimplifier.simplifyWithAttributes(
+    indices,positions,3,attributes,stride,weights,null,Math.floor(target)*3,error,flags
+  );
+ }else{
+  [reduced,metric]=MeshoptSimplifier.simplify(
+    indices,positions,3,Math.floor(target)*3,error,flags
+  );
+ }
  if(reduced.length===0)return {reason:'QEM не смог сохранить корректные треугольники.'};
  if(reduced.length>=indices.length)return {reason:'QEM не смог сократить этот меш без повреждения швов или границ. Исходник сохранён.'};
  const map=new Int32Array(count);map.fill(-1);
@@ -64,5 +98,6 @@ export async function simplifyQEM(g,target,options={}){
  return {geometry,vertices:old.length,triangles:reduced.length/3,
   originalTriangles:triCount,target,targetErrorPercent:Math.round(10000*((reduced.length/3)-target)/target)/100,
   qemError:metric,attempts:1,maxUvMovementTexels:0,maxMovementPercent:0,
-  method:'Meshoptimizer QEM edge collapse (UV and skin values unchanged)'};
+  method:useAttributes?'Meshoptimizer QEM with UV/normal-aware error': 'Meshoptimizer QEM (UV and weights copied without averaging)',
+  attributeAware:!!useAttributes};
 }
