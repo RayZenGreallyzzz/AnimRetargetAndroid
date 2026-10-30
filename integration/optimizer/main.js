@@ -5,6 +5,7 @@ import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {describe,simplifyGeometry,getBindCapsules,guardSkinToCapsules} from './mesh-tools.js';
 import {readClothProtection} from './cloth-mask.js';
+import {paintDetailSphere,countLocked} from './detail-locks.js';
 import {optimizeInBackground} from './optimizer-background.js';
 import './style.css';
 
@@ -21,6 +22,12 @@ const ui=[
 '<label>Способ упрощения<select id="method"><option value="qem">QEM — качественное упрощение (рекомендуется)</option><option value="cluster">Кластеризация — экспериментальная</option></select></label>',
 '<label>Точность QEM<select id="qem-quality"><option value="0.01">Максимальная защита формы</option><option value="0.025" selected>Сбалансированная</option><option value="0.075">Более сильное упрощение</option></select></label>',
 '<label class="toggle"><input id="qem-attributes" type="checkbox" checked/> Учитывать UV атлас и нормали при выборе граней</label>',
+'<h4>🛡️ Защитить лицо, волосы и мелкие детали</h4>',
+'<p>Включи кисть и коснись лица, волос, ремней или украшений. Выбранные вершины не удаляются при QEM. Сфера захватывает соседние слои.</p>',
+'<label>Радиус защиты: <span id="detail-radius-value">4%</span> высоты меша<input id="detail-radius" type="range" min=".005" max=".20" step=".005" value=".04"/></label>',
+'<label>Действие<select id="detail-mode"><option value="protect">Защитить вершины</option><option value="erase">Стереть защиту</option></select></label>',
+'<div class="buttons"><button id="detail-brush">🖌 Включить защиту</button><button id="detail-clear">Сбросить защиту</button></div>',
+'<p id="detail-status">Защищено 0 вершин. Маска работает только для текущего шага оптимизации.</p>',
 '<p>Цель действует на выбранный меш, не на весь GLB. Волосы, одежда и тело могут быть разными мешами. Общее число треугольников смотри в статистике.</p>',
 '<label class="toggle"><input id="uv" type="checkbox" checked/> Защищать UV и текстуры</label>',
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
@@ -60,10 +67,88 @@ let character=null,animations=[],meshes=[],pending=null,playing=false,mixer=null
 let activeOptimization=null;
 const originals=new Map(),capsuleGroup=new THREE.Group();
 let weightDots=null,wireOverlay=null;
+const detailMasks=new WeakMap();let detailPainting=false,detailOverlay=null;
 scene.add(capsuleGroup);
 const msg=s=>{$('status').textContent=s;};
 const fmt=n=>Number(n).toLocaleString('ru-RU');
 function selected(){return meshes[Number($('meshes').value)]?.node||null;}
+const detailRaycaster=new THREE.Raycaster(),detailPointer=new THREE.Vector2();
+function currentDetailMask(mesh=selected()){
+ if(!mesh)return null;
+ let mask=detailMasks.get(mesh);
+ const size=mesh.geometry.getAttribute('position')?.count||0;
+ if(!mask||mask.length!==size){mask=new Uint8Array(size);detailMasks.set(mesh,mask);}
+ return mask;
+}
+function clearDetailOverlay(){
+ if(!detailOverlay)return;
+ detailOverlay.parent?.remove(detailOverlay);
+ detailOverlay.geometry.dispose();detailOverlay.material.dispose();detailOverlay=null;
+}
+function updateDetailOverlay(){
+ clearDetailOverlay();
+ const mesh=selected();if(!mesh)return;
+ const mask=currentDetailMask(mesh),total=countLocked(mask);
+ $('detail-status').textContent='Защищено '+fmt(total)+' из '+fmt(mask.length)+
+  ' вершин. Защита применяется к следующему QEM; после применения сетки её нужно нарисовать заново.';
+ if(!total)return;
+ const p=mesh.geometry.getAttribute('position'),verts=[],tmp=new THREE.Vector3();
+ mesh.updateMatrixWorld(true);
+ const step=Math.max(1,Math.ceil(total/3500));let used=0;
+ for(let i=0;i<mask.length;i++){
+  if(!mask[i]||used++%step)continue;
+  tmp.fromBufferAttribute(p,i).applyMatrix4(mesh.matrixWorld);
+  verts.push(tmp.x,tmp.y,tmp.z);
+ }
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+ const worldSize=new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).length();
+ detailOverlay=new THREE.Points(g,new THREE.PointsMaterial({
+  color:0xffab44,size:Math.max(.001,worldSize*.004),sizeAttenuation:true,
+  depthTest:false,depthWrite:false
+ }));
+ detailOverlay.renderOrder=120;scene.add(detailOverlay);
+}
+function disableDetailPainting(){
+ detailPainting=false;controls.enabled=true;renderer.domElement.style.cursor='';
+ $('detail-brush').textContent='🖌 Включить защиту';
+}
+function detailTouch(event){
+ if(!detailPainting||event.button!==0)return;
+ event.preventDefault();event.stopPropagation();
+ const mesh=selected();if(!mesh||pending||activeOptimization)return;
+ const rect=renderer.domElement.getBoundingClientRect();
+ detailPointer.set(2*(event.clientX-rect.left)/rect.width-1,
+  1-2*(event.clientY-rect.top)/rect.height);
+ detailRaycaster.setFromCamera(detailPointer,camera);
+ const hit=detailRaycaster.intersectObject(mesh,false)[0];
+ if(!hit)return msg('Коснись самой модели, а не фона.');
+ const center=mesh.worldToLocal(hit.point.clone()),g=mesh.geometry;
+ g.computeBoundingBox();
+ const radius=g.boundingBox.getSize(new THREE.Vector3()).length()*Number($('detail-radius').value);
+ try{
+  const changed=paintDetailSphere(g,currentDetailMask(mesh),center,radius,$('detail-mode').value==='protect');
+  updateDetailOverlay();
+  msg('Защита деталей: изменено '+fmt(changed)+' вершин. Оранжевые точки не экспортируются.');
+ }catch(error){msg('Ошибка защитной кисти: '+error.message)}
+}
+renderer.domElement.addEventListener('pointerdown',detailTouch,true);
+$('detail-radius').oninput=()=>{$('detail-radius-value').textContent=(Number($('detail-radius').value)*100).toFixed(1)+'%';};
+$('detail-brush').onclick=()=>{
+ if(!selected())return msg('Сначала загрузи модель GLB.');
+ if(pending||activeOptimization)return msg('Сначала заверши текущую обработку.');
+ if($('method').value!=='qem')return msg('Защитная кисть работает только в режиме QEM.');
+ if(detailPainting){disableDetailPainting();return}
+ detailPainting=true;controls.enabled=false;renderer.domElement.style.cursor='crosshair';
+ $('detail-brush').textContent='✓ Выключить кисть (вращать камеру)';
+ msg('Коснись нужной детали модели. Камера временно заблокирована.');
+};
+$('detail-clear').onclick=()=>{
+ if(!selected())return;
+ if(!confirm('Очистить всю маску защиты деталей?'))return;
+ detailMasks.delete(selected());updateDetailOverlay();
+ msg('Защита деталей очищена.');
+};
+
 function textureSafety(mesh){
  // Use effective texture resolution AFTER KHR_texture_transform repeat.
  // The user's gltfpack WebP atlas has UV 0..1/16 and texture.repeat≈16.
@@ -208,6 +293,7 @@ function apply(){
   if(!originals.has(mesh))originals.set(mesh,before);
   else if(before!==originals.get(mesh))before.dispose();
   mesh.geometry=geometry;pending=null;mesh.geometry.computeBoundingSphere();
+  detailMasks.delete(mesh);disableDetailPainting();updateDetailOverlay();
   $('compare').disabled=true;
   selectedStats();updateCapsules();
   msg('Изменение '+type+' применено в рабочей копии. Экспортируй GLB отдельно или восстанови оригинал.');
@@ -230,6 +316,7 @@ function fit(){
   grid.position.y=b.min.y-h*.01;
 }
 function setModel(gltf,name){
+  disableDetailPainting();clearDetailOverlay();
   if(character){restore();scene.remove(character);}
   clearCapsules();originals.clear();pending=null;
   character=gltf.scene;scene.add(character);character.updateMatrixWorld(true);
@@ -244,7 +331,7 @@ function setModel(gltf,name){
     const option=document.createElement('option');option.value=i;
     option.textContent=m.name+' · '+fmt(m.triangles)+' △';$('meshes').append(option);
   });
-  $('meshes').value=0;updateBones();fit();selectedStats();
+  $('meshes').value=0;updateBones();fit();selectedStats();updateDetailOverlay();
   msg('Загружено: '+name+'. Для проверки капсул показана исходная поза скелета (BindPose), анимация остановлена. Сравни с поверхностью перед коррекцией весов.');
 }
 $('opt-model-file').onchange=async e=>{
@@ -257,7 +344,7 @@ $('opt-model-file').onchange=async e=>{
     loader.parse(buffer,'',gltf=>setModel(gltf,file.name),e=>msg('Ошибка GLB: '+e.message));
   }catch(e){msg('Импорт не удался: '+e.message);}
 };
-$('meshes').onchange=()=>{cancelPending();updateBones();selectedStats();};
+$('meshes').onchange=()=>{disableDetailPainting();cancelPending();updateBones();selectedStats();updateDetailOverlay();};
 $('presets').onchange=()=>{if($('presets').value!=='custom')$('target').value=$('presets').value;};
 $('bones').onchange=updateCapsules;
 $('radius').oninput=()=>{$('radius-value').textContent=Number($('radius').value).toFixed(2);updateCapsules();};
@@ -280,6 +367,9 @@ $('simplify').onclick=async()=>{
   const mesh=selected();if(!mesh)return msg('Сначала загрузи GLB.');
   const cloth=readClothProtection(mesh);
   if(cloth.hasMask)return msg('У этого меша есть защита одежды. Упрощение изменит номера вершин. Сначала создай отдельную копию без маски в Character.');
+  if($('method').value!=='qem'&&countLocked(currentDetailMask(mesh))>0)
+    return msg('Есть защищённые вершины: используй QEM либо очисти маску перед кластеризацией.');
+  disableDetailPainting();clearDetailOverlay();
   cancelPending();
   const target=Number($('target').value);
   if(!Number.isInteger(target)||target<64)return msg('Задай целевое число треугольников не менее 64.');
@@ -295,6 +385,7 @@ $('simplify').onclick=async()=>{
       preserveUV:$('uv').checked,protectSkin:$('joint').checked,
       method:$('method').value,qemError:Number($('qem-quality').value),
       attributeAware:$('qem-attributes').checked,
+      protectedVertices:$('method').value==='qem'?currentDetailMask(mesh):null,
       ...textureSafety(mesh)
     },(attempt,total)=>{
       msg('Оптимизация меша: проход '+attempt+' из примерно '+total+
