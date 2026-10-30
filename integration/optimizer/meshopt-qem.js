@@ -41,14 +41,19 @@ export async function simplifyQEM(g,target,options={}){
  await MeshoptSimplifier.ready;
  const error=Math.max(.0001,Math.min(.3,Number(options.qemError)||.025));
  const flags=options.qemRegularize===false?[]:['Regularize'];
- const useAttributes=options.attributeAware!==false&&(attrs.normal||attrs.uv);
+ const locked=options.protectedVertices||null;
+ if(locked&&(locked.length!==count||!(locked instanceof Uint8Array)))
+  return {reason:'Маска защиты деталей не совпадает с количеством вершин. Исходник сохранён.'};
+ const protectedCount=locked?locked.reduce((n,v)=>n+(v?1:0),0):0;
+ const useAttributes=!!locked||(options.attributeAware!==false&&(attrs.normal||attrs.uv));
  let reduced,metric;
  if(useAttributes){
   const normal=attrs.normal,uv=attrs.uv;
-  const stride=(normal?3:0)+(uv?2:0),attributes=new Float32Array(count*stride);
+  const stride=(normal?3:0)+(uv?2:0)||3,attributes=new Float32Array(count*stride);
   const weights=[];
   if(normal)weights.push(.6,.6,.6);
   if(uv)weights.push(.4,.4);
+  if(!normal&&!uv)weights.push(.001,.001,.001);
   const repeat=Math.max(1,Math.min(128,Number(options.uvRepeat)||1));
   for(let i=0;i<count;i++){
    let k=i*stride;
@@ -62,9 +67,10 @@ export async function simplifyQEM(g,target,options={}){
      attributes[k++]=v*repeat;
     }
    }
+   if(!normal&&!uv){attributes[i*stride]=positions[i*3];attributes[i*stride+1]=positions[i*3+1];attributes[i*stride+2]=positions[i*3+2];}
   }
   [reduced,metric]=MeshoptSimplifier.simplifyWithAttributes(
-    indices,positions,3,attributes,stride,weights,null,Math.floor(target)*3,error,flags
+    indices,positions,3,attributes,stride,weights,locked,Math.floor(target)*3,error,flags
   );
  }else{
   [reduced,metric]=MeshoptSimplifier.simplify(
@@ -73,6 +79,12 @@ export async function simplifyQEM(g,target,options={}){
  }
  if(reduced.length===0)return {reason:'QEM не смог сохранить корректные треугольники.'};
  if(reduced.length>=indices.length)return {reason:'QEM не смог сократить этот меш без повреждения швов или границ. Исходник сохранён.'};
+ const included=new Uint8Array(count);
+ for(const id of reduced)included[id]=1;
+ let lockedKept=0;
+ if(locked)for(let i=0;i<count;i++)if(locked[i]&&included[i])lockedKept++;
+ if(protectedCount&&lockedKept<protectedCount)return {reason:'QEM не сохранил все защищённые вершины ('+
+  lockedKept+' из '+protectedCount+'). Изменение сетки отменено.'};
  const map=new Int32Array(count);map.fill(-1);
  const old=[];const newIndex=new (count<=65535?Uint16Array:Uint32Array)(reduced.length);
  for(let k=0;k<reduced.length;k++){
@@ -99,5 +111,5 @@ export async function simplifyQEM(g,target,options={}){
   originalTriangles:triCount,target,targetErrorPercent:Math.round(10000*((reduced.length/3)-target)/target)/100,
   qemError:metric,attempts:1,maxUvMovementTexels:0,maxMovementPercent:0,
   method:useAttributes?'Meshoptimizer QEM with UV/normal-aware error': 'Meshoptimizer QEM (UV and weights copied without averaging)',
-  attributeAware:!!useAttributes};
+  attributeAware:!!useAttributes,protectedCount,lockedKept};
 }
