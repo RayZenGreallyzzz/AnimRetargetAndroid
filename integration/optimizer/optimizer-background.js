@@ -101,3 +101,46 @@ export function optimizeInBackground(g,target,options={},progress=()=>{}){
    cleanup();rejectPending(new Error('Расчёт отменён. Исходный GLB не изменён.'));
  }};
 }
+
+/** Bake tangent-space normals in the same isolated Worker as QEM.
+ * No renderer or textures are touched until the main thread explicitly
+ * receives a complete, validated RGBA image.
+ */
+export function bakeNormalsInBackground(high,low,options={}){
+ if(typeof Worker==='undefined')
+  throw Error('Фоновое запекание требует Android WebView с поддержкой Worker.');
+ const highBytes=geometryBytes(high),lowBytes=geometryBytes(low);
+ if(highBytes.reason||lowBytes.reason)throw Error(highBytes.reason||lowBytes.reason);
+ const total=highBytes.estimated+lowBytes.estimated;
+ if(total>memoryBudget())throw Error(
+  'Оценка памяти запекания '+Math.ceil(total/1048576)+
+  ' МБ превышает допустимые '+Math.round(memoryBudget()/1048576)+
+  ' МБ. Запекание не началось; модели не изменены.'
+ );
+ const source=pack(high),target=pack(low);
+ const worker=new Worker(new URL('./optimizer.worker.js',import.meta.url),{type:'module'});
+ let done=false,resolvePending,rejectPending;
+ const promise=new Promise((resolve,reject)=>{resolvePending=resolve;rejectPending=reject});
+ function cleanup(){if(done)return;done=true;worker.terminate()}
+ worker.onmessage=e=>{
+  if(done)return;
+  const m=e.data||{};
+  if(m.kind==='error'){cleanup();rejectPending(new Error(m.message));return}
+  if(m.kind==='normalDone'){
+   try{
+    const out=m.result;
+    if(!out?.size||out.pixels?.length!==out.size*out.size*4)
+     throw Error('Некорректная normal map из фонового потока.');
+    cleanup();resolvePending(out);
+   }catch(error){cleanup();rejectPending(error)}
+  }
+ };
+ worker.onerror=e=>{if(done)return;cleanup();rejectPending(new Error(e.message||'Сбой запекания'))};
+ try{worker.postMessage({kind:'bakeNormals',high:source.data,low:target.data,options},
+  [...source.transfers,...target.transfers]);}
+ catch(error){cleanup();rejectPending(error)}
+ return {promise,cancel(){
+  if(done)return;
+  cleanup();rejectPending(new Error('Запекание отменено. Исходная модель не изменена.'));
+ }};
+}
