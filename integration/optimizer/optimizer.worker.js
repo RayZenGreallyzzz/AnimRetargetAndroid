@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {simplifyGeometry} from './mesh-tools.js';
 import {simplifyQEM} from './meshopt-qem.js';
 import {bakeNormalPixels} from './normal-bake.js';
+import {bakePbrPixels} from './pbr-bake.js';
 
 function packGeometry(g){
  const attributes={};const transfers=[];
@@ -25,6 +26,17 @@ function decodeGeometry(raw){
  return g;
 }
 self.onmessage=async e=>{
+ if(e.data?.kind==='bakePbr'){
+  let high=null,low=null;
+  try{
+   high=decodeGeometry(e.data.high);
+   low=decodeGeometry(e.data.low);
+   const result=bakePbrPixels(high,low,e.data.options);
+   self.postMessage({kind:'pbrDone',result},result.maps.map(m=>m.pixels.buffer));
+  }catch(error){self.postMessage({kind:'error',message:error?.message||String(error)})}
+  finally{high?.dispose();low?.dispose()}
+  return;
+ }
  if(e.data?.kind==='bakeNormals'){
   let high=null,low=null;
   try{
