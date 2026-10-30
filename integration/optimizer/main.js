@@ -188,7 +188,9 @@ function selectedStats(){
     const geometry=node.geometry,faceCount=Math.floor(
       (geometry.index?.count||geometry.getAttribute('position')?.count||0)/3);
     const inPreview=pending?.mesh===node;
-    const stage=inPreview?' · ПРЕДПРОСМОТР':originals.has(node)?' · ИЗМЕНЁН':'';
+    const stage=inPreview
+      ?(geometry===pending.geometry?' · ПОСЛЕ (предпросмотр)':' · ДО (предпросмотр)')
+      :originals.has(node)?' · ИЗМЕНЁН':'';
     option.textContent=meshes[i].name+' · '+fmt(faceCount)+' △'+stage;
   }
   const d=describe(character),m=selected();
@@ -198,6 +200,7 @@ function selectedStats(){
     (m?'\nВыбран: '+(m.name||'Mesh')+' · '+fmt(Math.floor((m.geometry.index?.count||m.geometry.getAttribute('position').count)/3))+
        ' треугольников · '+(m.isSkinnedMesh?m.skeleton.bones.length+' костей':'без скелета'):'')+
     (protection?.hasMask ? '\nЗащита одежды: '+(protection.reason || fmt(protection.count)+' вершин защищено') : '');
+  normalBaker.refresh();
 }
 function clearWire(){
   if(wireOverlay){
