@@ -144,3 +144,47 @@ export function bakeNormalsInBackground(high,low,options={}){
   cleanup();rejectPending(new Error('Запекание отменено. Исходная модель не изменена.'));
  }};
 }
+
+/** Optional offline high-to-low PBR albedo/MR/AO/emissive transfer.
+ * Works only with compatible UV0 atlas + single material. Input textures
+ * are transferred to worker as byte copies, without touching live renderer.
+ */
+export function bakePbrInBackground(high,low,options={}){
+ if(typeof Worker==='undefined')
+  throw Error('PBR-запекание требует Android WebView с поддержкой Worker.');
+ const a=geometryBytes(high),b=geometryBytes(low);
+ if(a.reason||b.reason)throw Error(a.reason||b.reason);
+ const maps=options.sources||[],rawBytes=maps.reduce((sum,m)=>sum+(m.pixels?.byteLength||0),0);
+ if(a.estimated+b.estimated+rawBytes*3>memoryBudget())
+  throw Error('Нехватка безопасного бюджета RAM для PBR: выбери меньшее разрешение карты либо облегчённую модель.');
+ const source=pack(high),target=pack(low),copies=maps.map(m=>({...m,pixels:m.pixels.slice()}));
+ const worker=new Worker(new URL('./optimizer.worker.js',import.meta.url),{type:'module'});
+ let done=false,resolvePending,rejectPending;
+ const promise=new Promise((resolve,reject)=>{resolvePending=resolve;rejectPending=reject});
+ function cleanup(){if(done)return;done=true;worker.terminate()}
+ worker.onmessage=e=>{
+  if(done)return;
+  const msg=e.data||{};
+  if(msg.kind==='error'){cleanup();rejectPending(new Error(msg.message));return}
+  if(msg.kind==='pbrDone'){
+   try{
+    const result=msg.result;
+    if(!Array.isArray(result?.maps)||result.maps.length!==copies.length)
+     throw Error('Повреждённые данные PBR из фонового расчёта.');
+    for(const m of result.maps)if(m.pixels?.length!==m.width*m.height*4)
+     throw Error('Повреждённая PBR-карта '+m.key);
+    cleanup();resolvePending(result);
+   }catch(error){cleanup();rejectPending(error)}
+  }
+ };
+ worker.onerror=e=>{if(done)return;cleanup();rejectPending(new Error(e.message||'Сбой PBR Worker'))};
+ try{
+  worker.postMessage({kind:'bakePbr',high:source.data,low:target.data,
+   options:{...options,sources:copies}},
+   [...source.transfers,...target.transfers,...copies.map(m=>m.pixels.buffer)]);
+ }catch(error){cleanup();rejectPending(error)}
+ return {promise,cancel(){
+  if(done)return;
+  cleanup();rejectPending(new Error('PBR-запекание отменено, оригинал не изменён.'));
+ }};
+}
