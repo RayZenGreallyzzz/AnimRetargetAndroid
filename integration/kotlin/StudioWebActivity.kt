@@ -142,7 +142,8 @@ class StudioWebActivity : Activity() {
                 // Initial onResume can happen before Vite/Three initializes.
                 // Force a second activation at document ready so every tab
                 // sees the latest shared GLB, even after process recreation.
-                if(view != null && url?.startsWith("https://appassets.androidplatform.net/assets/studio/")==true)
+                if(view != null && view === views[selected] &&
+                    url?.startsWith("https://appassets.androidplatform.net/assets/studio/")==true)
                     view.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))",null)
             }
             override fun shouldInterceptRequest(
