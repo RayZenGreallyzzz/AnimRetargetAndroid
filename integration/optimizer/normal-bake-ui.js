@@ -114,5 +114,7 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify,canSta
    setTimeout(()=>URL.revokeObjectURL(url),15000);
   },'image/png');
  };
- return {isBusy,hasMaterial:mesh=>entries.has(mesh),cancel,clear,clearAll,refresh};
+ return {isBusy,hasMaterial:mesh=>entries.has(mesh),showPreview(mesh,after){
+  const e=entries.get(mesh);if(e)mesh.material=after?e.baked:e.original;
+ },cancel,clear,clearAll,refresh};
 }
