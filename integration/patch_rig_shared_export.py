@@ -18,7 +18,7 @@ PATCH = (
     'if(e.is_android()){'
 )
 
-def patch_rig_export(stage: Path) -> Path:
+def patch_rig_export(stage: Path) -> list[Path]:
     assets = stage / 'assets'
     matched = []
     for path in assets.glob('*.js'):
@@ -27,14 +27,16 @@ def patch_rig_export(stage: Path) -> Path:
             if source.count(MARKER) != 1:
                 raise RuntimeError(f'Ambiguous Rig export function in {path.name}')
             matched.append((path, source))
-    if len(matched) != 1:
-        raise RuntimeError(f'Expected exactly one Rig 7.6 export implementation; found {len(matched)}')
-    path, source = matched[0]
-    updated = source.replace(MARKER, PATCH, 1)
-    path.write_text(updated, encoding='utf-8')
-    return path
+    # The pinned Rig 7.6 APK bundles TWO legitimate copies of the
+    # underlying exporter. Both must be patched, not just the first one.
+    if not matched:
+        raise RuntimeError('Could not find the original Rig 7.6 GLB exporter')
+    for path, source in matched:
+        path.write_text(source.replace(MARKER, PATCH, 1), encoding='utf-8')
+    return [path for path, _ in matched]
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         raise SystemExit('Usage: patch_rig_shared_export.py <staged-rig-folder>')
-    print('Rig GLB shared workspace export patched:', patch_rig_export(Path(sys.argv[1])))
+    print('Rig GLB shared workspace exporters patched:',
+          ', '.join(str(path) for path in patch_rig_export(Path(sys.argv[1]))))
