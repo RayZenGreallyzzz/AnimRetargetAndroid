@@ -10,6 +10,7 @@
     ".phoenix-suite-tabs{display:flex;align-items:center;gap:5px;max-width:100%;overflow-x:auto;scrollbar-width:thin;padding:4px 5px;border-radius:12px;background:#151820;border:1px solid #444a55;z-index:2100}",
     ".phoenix-suite-tabs button{white-space:nowrap;flex-shrink:0;min-height:37px;background:#242a34;border:1px solid #3a4250;color:#f4f4f4;border-radius:8px;padding:6px 10px;font:600 12px system-ui}",
     ".phoenix-suite-tabs button.is-active{background:#853b19;border-color:#f68a44;color:#fff}",
+    ".phoenix-active-character{flex-shrink:0;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#aee4aa;font:600 11px system-ui;padding:4px 7px;border:1px solid #426946;border-radius:7px}",
     ".phoenix-suite-tabs button:focus-visible,.phoenix-workspace button:focus-visible{outline:2px solid #ff8a36}",
     ".phoenix-workspace-backdrop{position:fixed;inset:0;z-index:2147483646;background:#000b;display:flex;align-items:center;justify-content:center;padding:12px}",
     ".phoenix-workspace{width:min(540px,98vw);max-height:83vh;overflow:auto;background:#191d27;color:#f0f2f5;border:1px solid #6c778c;border-radius:14px;padding:16px;font:14px system-ui;box-shadow:0 10px 50px #000b}",
@@ -243,6 +244,23 @@
     const workspace=document.createElement("button");workspace.type="button";
     workspace.textContent="📁 Общие GLB"; workspace.onclick=showPanel;
     tabs.append(workspace);
+    const activeLabel=document.createElement("span");
+    activeLabel.id="phoenix-active-character";
+    activeLabel.className="phoenix-active-character";
+    activeLabel.title="Единый GLB для всех вкладок";
+    const refreshActiveLabel=()=>{
+      try{
+        const raw=call("getActiveFileJson"),model=JSON.parse(raw||"{}");
+        const revision=Number(model.revision)||0;
+        activeLabel.textContent=revision>0
+          ?"🟢 Персонаж: "+model.name+" · v"+revision
+          :"⚠️ Общий GLB не выбран";
+      }catch{activeLabel.textContent="⚠️ Нет общего GLB"}
+    };
+    refreshActiveLabel();
+    window.addEventListener("phoenix:activated",refreshActiveLabel);
+    window.addEventListener("phoenix:workspace-updated",refreshActiveLabel);
+    tabs.append(activeLabel);
     const memory=document.createElement("button");memory.type="button";
     memory.textContent="🧹 Память"; memory.title="Освободить RAM, закрыв неактивные вкладки после подтверждения";
     memory.onclick=()=>call("releaseHiddenEditors");
