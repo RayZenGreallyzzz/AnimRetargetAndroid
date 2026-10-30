@@ -49,6 +49,64 @@ def patch_main(source: str) -> str:
 
 """
     source = once(source, location, helper + location)
+    native_shared_publish = """    // Explicitly promote a generated GLB into the SAME app-private
+    // workspace as Optimize, Rig and Character. Every retarget output may
+    // contain a different clip, so NEVER overwrite active GLB silently.
+    private fun confirmRetargetResultForForge(output: Output) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Сделать GLB общим персонажем?")
+            .setMessage("Текущий результат может содержать только выбранный клип анимации. " +
+                "Предыдущий общий GLB останется в истории. Открыть этот результат во всех вкладках Forge?")
+            .setPositiveButton("Сохранить и вернуться") { _, _ ->
+                try {
+                    val original = File(File(cacheDir, "outputs"), output.name)
+                    if(!original.isFile || original.length() <= 0L ||
+                        original.length() > 140L * 1024L * 1024L ||
+                        !original.name.endsWith(".glb", ignoreCase=true))
+                        throw IllegalStateException("Нет корректного GLB")
+                    val workspace=File(filesDir, "phoenix_workspace").apply { mkdirs() }
+                    val clean=output.name.substringBeforeLast('.')
+                        .replace(Regex("[^a-zA-Z0-9А-Яа-яЁё._ ()-]"), "_").take(90)
+                    val basename="Retarget_" + clean
+                    var candidate=File(workspace, basename+".glb")
+                    var counter=2
+                    while(candidate.exists())candidate=File(workspace, basename+"_"+(counter++)+".glb")
+                    val pending=File(workspace, ".retarget_"+java.util.UUID.randomUUID()+".tmp")
+                    try {
+                        original.inputStream().use { input ->
+                            pending.outputStream().use { out -> input.copyTo(out,65536) }
+                        }
+                        if(pending.length()!=original.length() || !pending.renameTo(candidate))
+                            throw IllegalStateException("Не удалось сохранить общую модель")
+                    }finally {pending.delete()}
+                    val prefs=getSharedPreferences("phoenix_suite_workspace_v2", MODE_PRIVATE)
+                    prefs.edit()
+                        .putString("name",candidate.name)
+                        .putString("origin","retarget")
+                        .putLong("revision",prefs.getLong("revision",0L)+1L)
+                        .putLong("size",candidate.length()).apply()
+                    toast("GLB передан в общий Forge")
+                    finish() // Restore the paused Forge tab; it auto-loads revision.
+                }catch(e: Exception){toast("Ошибка общего GLB: ${e.message}")}
+            }
+            .setNegativeButton("Отмена",null)
+            .show()
+    }
+
+"""
+    source = once(source, location, native_shared_publish + location)
+    native_result_anchor = """            if (o.result != null) {
+"""
+    native_result_replacement = """            if (o.name.endsWith(".glb", ignoreCase = true)) {
+                row.addView(MaterialButton(this).apply {
+                    text = "В общий Forge"
+                    textSize = 12f
+                    setOnClickListener { confirmRetargetResultForForge(o) }
+                })
+            }
+            if (o.result != null) {
+"""
+    source = once(source, native_result_anchor, native_result_replacement)
     start = source.index("    private fun loadCharacter(uri: Uri) {")
     stop = source.index("    private fun addAnims(uri: Uri)", start)
     block = source[start:stop]
