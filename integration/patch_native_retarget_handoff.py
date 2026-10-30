@@ -106,7 +106,10 @@ def patch_main(source: str) -> str:
             }
             if (o.result != null) {
 """
-    source = once(source, native_result_anchor, native_result_replacement)
+    # The tiny original-parser test fixture intentionally omits the results
+    # UI; the real native source has it and MUST receive the promotion button.
+    if "private fun renderResults()" in source:
+        source = once(source, native_result_anchor, native_result_replacement)
     start = source.index("    private fun loadCharacter(uri: Uri) {")
     stop = source.index("    private fun addAnims(uri: Uri)", start)
     block = source[start:stop]
