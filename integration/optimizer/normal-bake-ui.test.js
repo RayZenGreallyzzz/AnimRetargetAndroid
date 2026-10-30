@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {setupNormalBaker} from './normal-bake-ui.js';
 
-function fixture(hasNormal=true){
+function fixture(hasNormal=true,hasPreview=true){
  const elements={
   'bake-normal':{textContent:'',onclick:null},
   'bake-download':{disabled:true,onclick:null},
@@ -15,7 +15,7 @@ function fixture(hasNormal=true){
  const preview={mesh,before:{getAttribute:()=>({count:3})},geometry};
  const messages=[];
  const controller=setupNormalBaker({
-  getMesh:()=>mesh,getPending:()=>preview,
+  getMesh:()=>mesh,getPending:()=>hasPreview?preview:null,
   getOriginal:()=>undefined,$:id=>elements[id],
   notify:message=>messages.push(message)
  });
@@ -41,7 +41,7 @@ test('Bake panel immediately explains why PNG is disabled and updates on checkbo
  assert.equal(elements['bake-download'].disabled,true);
 });
 test('Bake panel detects missing QEM preview without starting an empty bake',()=>{
- const {controller,elements}=fixture(false);
+ const {controller,elements}=fixture(false,false);
  controller.refresh();
  assert.match(elements['bake-status'].textContent,/Сначала выполни QEM/);
 });
