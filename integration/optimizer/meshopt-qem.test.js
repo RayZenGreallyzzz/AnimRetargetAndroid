@@ -97,3 +97,18 @@ test('QEM output GLB preserves rig, texture UVs and animation clip after export'
   globalThis.FileReader=originalReader;
  }
 });
+
+test('million-triangle stress: offline QEM processes Tripo-size geometry while retaining UV',async()=>{
+ const started=Date.now(),g=makeGrid(725),source=g.index.count/3;
+ assert.equal(source,1051250);
+ const out=await simplifyQEM(g,300000,{qemError:.15,attributeAware:true,uvRepeat:16});
+ console.log('QEM_MILLION_BENCHMARK',JSON.stringify({
+  source,target:300000,output:out.triangles||0,vertices:out.vertices||0,
+  elapsedMs:Date.now()-started,wasmError:out.qemError||null,reason:out.reason||null
+ }));
+ assert.ok(out.geometry,out.reason);
+ assert.ok(out.triangles<source,'no hard 1M limit');
+ assert.ok(out.geometry.getAttribute('uv'));
+ assert.ok(out.geometry.getAttribute('skinWeight'));
+ out.geometry.dispose();g.dispose();
+});
