@@ -53,7 +53,9 @@ export function setupNormalBaker({getMesh,getPending,getOriginal,$,notify}){
   if(preview&&preview.mesh!==mesh)return notify('Выбери меш с текущим предпросмотром.');
   if(Array.isArray(mesh.material)||!low.getAttribute('uv'))
    return notify('Запекание пока поддерживает один материал и UV.');
-  const map=mesh.material?.map||null;
+  if(mesh.material?.normalMap && !$('bake-overwrite').checked)
+   return notify('В исходной модели уже есть normal map! QEM сохраняет её без изменений. Для сравнения с новым запеканием явно включи «Заменить существующую normal map».');
+  const map=mesh.material?.normalMap||mesh.material?.map||null;
   if(Math.abs(map?.rotation||0)>1e-7)
    return notify('Запекание повёрнутого атласа пока не поддерживается.');
   if(map?.flipY===true)
