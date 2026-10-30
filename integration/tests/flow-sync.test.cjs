@@ -23,11 +23,14 @@ function mountEditor(tool,native,initialFile=null){
  input.id=tool==='optimize'?'opt-model-file':tool==='rig'?'model-upload':'base-file';
  input.files=initialFile?[initialFile]:[];
  input.dataset={};
- const docEvents={},winEvents={},timers=[];
+ const docEvents={},docListeners={},winEvents={},timers=[];
  const createElement=()=>({style:{},hidden:false,children:[],addEventListener(){},append(...args){this.children.push(...args)},textContent:'',setAttribute(){}});
  const document={
   readyState:'complete',body:{appendChild(){}},getElementById:id=>id===input.id?input:null,
-  createElement,addEventListener:(event,listener)=>{docEvents[event]=listener}
+  createElement,addEventListener:(event,listener)=>{
+    (docListeners[event]??=[]).push(listener);
+    docEvents[event]=evt=>{for(const fn of docListeners[event])fn(evt)};
+  }
  };
  const loadCalls=[];
  const window={
