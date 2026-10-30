@@ -41,6 +41,7 @@ function mountEditor(tool,native,initialFile=null){
  };
  const context={window,document,console,HTMLInputElement,Object,Uint8Array,JSON,
   Number,Set,WeakSet,Promise,Error,String,Blob,Buffer,btoa,
+  Event:class{constructor(type){this.type=type}},
   CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}},
   requestAnimationFrame:cb=>cb(),setTimeout:cb=>cb()};
  runInNewContext(source,context,{filename:'studio-sync.js'});
