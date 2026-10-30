@@ -101,7 +101,8 @@ export function setupPbrBaker({getMesh,getPending,getOriginal,$,notify,canStart}
  }
  function attach(mesh,result,reference,originalMapByKey){
   if(!result.maps.length)throw Error('Нет PBR-карт');
-  const baked=mesh.material.clone(),textures=new Map(),canvases=new Map();
+  const originalMaterial=entries.get(mesh)?.original||mesh.material;
+  const baked=originalMaterial.clone(),textures=new Map(),canvases=new Map();
   try{
    for(const map of result.maps){
     const canvas=createCanvas(map),tex=new THREE.CanvasTexture(canvas);
@@ -120,9 +121,8 @@ export function setupPbrBaker({getMesh,getPending,getOriginal,$,notify,canStart}
    }
    baked.needsUpdate=true;
    clear(mesh);
-   const original=mesh.material;
    mesh.material=baked;
-   entries.set(mesh,{original,baked,textures,canvases});
+   entries.set(mesh,{original:originalMaterial,baked,textures,canvases});
   }catch(error){
    for(const tex of textures.values())tex.dispose();
    baked.dispose();
@@ -146,14 +146,15 @@ export function setupPbrBaker({getMesh,getPending,getOriginal,$,notify,canStart}
   if(preview&&preview.mesh!==mesh)return report('Выбери меш, который оптимизируешь.');
   if(canStart?.()===false)return report('Сначала отмени новое запекание normal map или восстанови исходный материал.');
   if(Array.isArray(mesh.material)||!mesh.material)return report('PBR перенос нескольких материалов в одном меше пока не поддерживается.');
+  const baseMaterial=entries.get(mesh)?.original||mesh.material;
   if(!$('pbr-replace').checked)
    return report('⚠️ QEM уже сохранил оригинальные PBR-карты. Для нового переноса поставь галочку «Создать новые PBR-карты».');
   const options=[],originalMapByKey=new Map();
   let reference=null,token=++generation;
   try{
    for(const [key,toggle] of FIELDS){
-    if(!$ (toggle).checked)continue;
-    const tex=mesh.material[key];
+    if(!$(toggle).checked)continue;
+    const tex=baseMaterial[key];
     if(!tex)continue;
     originalMapByKey.set(key,tex);
     if(!reference)reference=tex;
@@ -181,6 +182,10 @@ export function setupPbrBaker({getMesh,getPending,getOriginal,$,notify,canStart}
   }
  }
  $('pbr-replace').onchange=refresh;
+ $('pbr-reset').onclick=()=>{
+  const mesh=getMesh();if(!mesh)return;
+  clear(mesh);report('Новые PBR-карты отключены. Исходные текстуры снова активны.');
+ };
  $('pbr-bake').onclick=start;
  $('pbr-download').onclick=()=>{
   const entry=entries.get(getMesh()),key=$('pbr-save-which').value;
