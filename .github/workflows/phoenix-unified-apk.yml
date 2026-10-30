@@ -85,8 +85,8 @@ jobs:
           npm test
           npm run build
           test -s dist/index.html
-          test -s src/normal-bake.js
-          test -s src/normal-bake-ui.js
+          test -s normal-bake.js
+          test -s normal-bake-ui.js
           grep -R -q 'bake-normal' dist/assets
 
       - name: Test unified tabs and manifest injector
