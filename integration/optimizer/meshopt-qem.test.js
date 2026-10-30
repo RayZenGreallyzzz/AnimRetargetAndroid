@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {simplifyQEM} from './meshopt-qem.js';
 
 function makeGrid(n){
@@ -64,4 +65,35 @@ test('QEM can attempt >260k face mesh without unsafe vertex clustering',async()=
  assert.ok(out.geometry.getAttribute('uv'));
  assert.ok(out.geometry.getAttribute('skinIndex'));
  out.geometry.dispose();g.dispose();
+});
+
+test('QEM output GLB preserves rig, texture UVs and animation clip after export',async()=>{
+ const src=makeGrid(30),result=await simplifyQEM(src,550,{attributeAware:true,qemError:.1});
+ assert.ok(result.geometry,result.reason);
+ const originalReader=globalThis.FileReader;
+ globalThis.FileReader=class{
+  readAsArrayBuffer(blob){blob.arrayBuffer().then(buffer=>{this.result=buffer;this.onloadend?.({target:this})})}
+  readAsDataURL(blob){blob.arrayBuffer().then(buf=>{this.result='data:'+blob.type+';base64,'+Buffer.from(buf).toString('base64');this.onloadend?.({target:this})})}
+ };
+ const root=new THREE.Group(),body=new THREE.Bone(),hand=new THREE.Bone();
+ body.name='Body';hand.name='Hand';body.add(hand);root.add(body);
+ const mesh=new THREE.SkinnedMesh(result.geometry,new THREE.MeshStandardMaterial());
+ root.add(mesh);root.updateMatrixWorld(true);mesh.bind(new THREE.Skeleton([body,hand]));
+ const clip=new THREE.AnimationClip('QEM_Walk',1,[new THREE.QuaternionKeyframeTrack(
+  'Hand.quaternion',[0,1],[0,0,0,1,0,.2,0,.9797959]
+ )]);
+ try{
+  const bin=await new GLTFExporter().parseAsync(root,{binary:true,trs:true,animations:[clip]});
+  assert.ok(bin instanceof ArrayBuffer);
+  const d=new DataView(bin),size=d.getUint32(12,true);
+  const gltf=JSON.parse(new TextDecoder().decode(new Uint8Array(bin,20,size)).trim());
+  assert.equal(gltf.animations?.length,1);
+  assert.equal(gltf.skins?.length,1);
+  const attrs=gltf.meshes?.[0]?.primitives?.[0]?.attributes||{};
+  for(const a of ['POSITION','NORMAL','TEXCOORD_0','JOINTS_0','WEIGHTS_0'])
+   assert.ok(attrs[a]!==undefined,'missing '+a);
+ }finally{
+  mesh.geometry.dispose();mesh.material.dispose();src.dispose();
+  globalThis.FileReader=originalReader;
+ }
 });
