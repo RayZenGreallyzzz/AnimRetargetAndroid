@@ -81,6 +81,16 @@ jobs:
           tar -xjf /tmp/retarget.tar.bz2
           python3 hotfix/retarget_math_hotfix.py AnimRetargetAndroid
           python3 integration/patch_native_retarget_handoff.py AnimRetargetAndroid
+      - name: Prepare temporary native Retarget code review
+        run: |
+          mkdir -p integration-review
+          find AnimRetargetAndroid/app/src/main -name MainActivity.kt -print -exec cp {} integration-review/MainActivity.kt \;
+      - name: Upload temporary native Retarget code review
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixNativeRetargetSourceReview
+          path: integration-review/MainActivity.kt
+          retention-days: 1
       - name: Inject minimal local WebView assets (build-only validation)
         run: |
           mkdir -p /tmp/rig-build /tmp/character-build
