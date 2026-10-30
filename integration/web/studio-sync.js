@@ -14,6 +14,10 @@
   let lastRevision = -1;
   let hasModel = false;
   let syncing = false;
+  let dirty = false;
+  let publishing = null;
+  let localSource = null;
+  let lastError = '';
   let note = null, syncButton = null, nextButton = null, status = null;
   const handledFiles = new WeakSet();
 
@@ -86,8 +90,10 @@
       return;
     }
     const outOfDate = hasModel && model.revision !== lastRevision;
-    note.textContent = (outOfDate ? "Есть новая версия: " : "Общий персонаж: ")
-      + text(model.name) + " · ревизия " + model.revision;
+    note.textContent = (outOfDate ? (dirty?"⚠️ Вкладка изменена, а общий GLB новее: ":"Синхронизирую новую версию: ") : "Общий персонаж: ")
+      + text(model.name) + " · ревизия " + model.revision
+      + (dirty?" · здесь есть несохранённые правки":"")
+      + (lastError?" · ошибка: "+text(lastError):"");
     syncButton.hidden = syncing || (hasModel && !outOfDate);
     if(nextButton)nextButton.hidden=tool!=="optimize"||syncing;
     if (!hasModel) syncButton.textContent = "Открыть в этом редакторе";
@@ -98,9 +104,14 @@
     const active = getActive();
     if (!active || syncing) return;
     if (hasModel && active.revision === lastRevision) return;
+    if (!manual && dirty && hasModel) {
+      warn("Есть новые изменения общего GLB, но здесь несохранённые правки. Сохрани их в GLB или выбери «Загрузить новую версию».");
+      updateStatus();
+      return;
+    }
     // A user may already have edited the current editor; never overwrite silently.
-    if (manual && hasModel && !window.confirm(
-      "Загрузить другую версию GLB? Несохранённые изменения в этой вкладке могут быть потеряны."
+    if (manual && hasModel && dirty && !window.confirm(
+      "Загрузить актуальный общий GLB? Несохранённые изменения в этой вкладке будут потеряны."
     )) return;
     if (active.size > MAX_SIZE || active.size <= 0) {
       warn("Общая модель слишком большая для передачи. Максимум " + MAX_MB + " МБ.");
@@ -117,8 +128,15 @@
       await suite.useWorkspaceFile(active.name, modelInput);
       hasModel = true;
       lastRevision = active.revision;
+      dirty = false;
+      localSource = active.name;
+      lastError = "";
+      window.dispatchEvent(new CustomEvent("phoenix:shared-model-loaded",{detail:{
+        name:active.name,revision:active.revision,tool
+      }}));
     } catch(err) {
-      warn("Не удалось синхронизировать модель: " + (err?.message || String(err)));
+      lastError = err?.message || String(err);
+      warn("Не удалось синхронизировать модель: " + lastError);
     } finally {
       syncing = false;
       updateStatus();
@@ -154,11 +172,14 @@
       if (!bridge.finishSave(token)) throw Error("Сохранение не завершено");
       token = "";
       const latest = getActive();
-      if(latest){lastRevision=latest.revision;hasModel=true;}
+      if(latest){lastRevision=latest.revision;hasModel=true;localSource=latest.name;}
+      dirty=false;lastError="";
+      window.dispatchEvent(new Event("phoenix:workspace-updated"));
       updateStatus();
     } catch (err) {
       if (token) bridge.cancelSave(token);
-      warn("Не удалось сохранить общую модель: " + (err?.message || String(err)));
+      lastError=err?.message||String(err);
+      warn("Не удалось сохранить общую модель: " + lastError);
     }
   }
 
@@ -174,9 +195,14 @@
     if (!file || handledFiles.has(file)) return;
     handledFiles.add(file);
     hasModel = true;
+    localSource = file.name;
+    dirty = false;
     lastRevision = getActive()?.revision ?? -1;
     updateStatus();
-    void publishImportedFile(file);
+    publishing = publishImportedFile(file).finally(()=>{
+      publishing=null;
+      updateStatus();
+    });
   }
 
   function onReactivated() {
@@ -187,29 +213,50 @@
       const input=document.getElementById(modelInput);
       const file=input?.files?.[0];
       if(file && !handledFiles.has(file) && !input.dataset.phoenixWorkspaceImport){
-        handledFiles.add(file);hasModel=true;
-        void publishImportedFile(file);
+        handledFiles.add(file);hasModel=true;localSource=file.name;
+        publishing=publishImportedFile(file).finally(()=>{publishing=null;updateStatus()});
       }
       updateStatus();return;
     }
     // First opening of the other module: automatically load the latest exported model.
-    if (!hasModel && !syncing) {
-      void syncActive(false);
-    } else {
-      // Existing edits must not be silently replaced by another tab's changes.
-      updateStatus();
-    }
+    if (!syncing && !publishing &&
+        (!hasModel || active.revision !== lastRevision)) {
+      // Other WebViews are paused on Android. Reload their current GLB
+      // when activated, unless this particular editor contains local edits.
+      if (!dirty)void syncActive(false);
+      else updateStatus();
+    } else updateStatus();
   }
 
+  function trackLocalEdit(event) {
+    // Ignore programmatic UI state changes and camera controls. Treat trusted
+    // user rig/weight/animation edits as dirty to avoid destroying them
+    // when a newer GLB is published by another tab.
+    if (!hasModel || syncing || !event?.isTrusted || publishing) return;
+    const target=event.target;
+    if (!target || target.id===modelInput || target.id==="phoenix-sync-bar" ||
+        target.closest?.("#phoenix-suite-tabs, #phoenix-sync-bar")) return;
+    if (/^(animation-filter|source-bones-filter|target-bones-filter)$/.test(target.id||""))return;
+    dirty=true;updateStatus();
+  }
+  // Used by native toolbar and by editor save handoffs to ensure the first
+  // imported GLB has completed its shared-workspace write before navigation.
+  window.PhoenixSync=Object.freeze({
+    async whenReady(){if(publishing)await publishing;return getActive()},
+    getState(){return {revision:lastRevision,dirty,syncing,hasModel,source:localSource}},
+    markSaved(revision){dirty=false;hasModel=true;lastRevision=revision??getActive()?.revision??lastRevision;lastError="";updateStatus()}
+  });
   function init() {
     mount();
     document.addEventListener("change", onFileInputChange, true);
+    document.addEventListener("change", trackLocalEdit, true);
+    document.addEventListener("input", trackLocalEdit, true);
     window.addEventListener("phoenix:activated", onReactivated);
     window.addEventListener("phoenix:workspace-updated", () => {
       const active = getActive();
       if (active && active.origin === tool) {
-        hasModel = true;
-        lastRevision = active.revision;
+        hasModel = true;dirty=false;lastError="";
+        localSource=active.name;lastRevision=active.revision;
       }
       updateStatus();
     });
