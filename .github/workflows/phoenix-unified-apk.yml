@@ -133,20 +133,20 @@ jobs:
           content = gradle.read_text(encoding="utf-8")
           old = 'applicationIdSuffix = ".suite"'
           assert content.count(old) == 1, "Unexpected original Android application suffix"
-          gradle.write_text(content.replace(old, 'applicationIdSuffix = ".suitetripoqa6"'), encoding="utf-8")
+          gradle.write_text(content.replace(old, 'applicationIdSuffix = ".suiteqemqa7"'), encoding="utf-8")
           manifest = Path("AnimRetargetAndroid/app/src/main/AndroidManifest.xml")
           ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
           tree = ET.parse(manifest)
           namespace = "{http://schemas.android.com/apk/res/android}label"
           app = tree.getroot().find("application")
           assert app is not None
-          app.set(namespace, "Phoenix Forge Tripo Texture QA6")
+          app.set(namespace, "Phoenix Forge QEM QA7")
           for activity in app.findall("activity"):
               if activity.get("{http://schemas.android.com/apk/res/android}name") == "com.animretarget.app.StudioWebActivity":
-                  activity.set(namespace, "Phoenix Forge Tripo Texture QA6")
+                  activity.set(namespace, "Phoenix Forge QEM QA7")
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
           PY
-          echo "android_application_suffix=.suitetripoqa6" >> /tmp/phoenix-source-revisions.txt
+          echo "android_application_suffix=.suiteqemqa7" >> /tmp/phoenix-source-revisions.txt
 
       - uses: actions/setup-java@v4
         with:
@@ -185,7 +185,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixCharacterForge-TripoTextureQA6-APK
+          name: PhoenixCharacterForge-QEMQA7-APK
           path: AnimRetargetAndroid/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
