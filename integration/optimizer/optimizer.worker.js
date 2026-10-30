@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {simplifyGeometry} from './mesh-tools.js';
+import {simplifyQEM} from './meshopt-qem.js';
 
 function packGeometry(g){
  const attributes={};const transfers=[];
@@ -13,7 +14,7 @@ function packGeometry(g){
  if(index)transfers.push(index.buffer);
  return {data:{attributes,index,groups:g.groups.map(x=>({...x}))},transfers};
 }
-self.onmessage=e=>{
+self.onmessage=async e=>{
  if(e.data?.kind!=='simplify')return;
  let g=null,result=null;
  try{
@@ -26,7 +27,7 @@ self.onmessage=e=>{
   const options={...e.data.options,onProgress:(attempt,total)=>{
    self.postMessage({kind:'progress',attempt,total});
   }};
-  result=simplifyGeometry(g,e.data.target,options);
+  result=options.method==='qem' ? await simplifyQEM(g,e.data.target,options) : simplifyGeometry(g,e.data.target,options);
   if(!result.geometry){
    self.postMessage({kind:'error',message:result.reason||'Не удалось оптимизировать модель'});return;
   }
