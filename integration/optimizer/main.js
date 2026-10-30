@@ -313,11 +313,11 @@ function updateBones(){
 let pbrBaker=null;
 const normalBaker=setupNormalBaker({
  getMesh:selected,getPending:()=>pending,getOriginal:mesh=>originals.get(mesh),
- $,notify:msg,canStart:()=>!pbrBaker?.hasMaterial(selected())
+ $,notify:msg,canStart:()=>!pbrBaker?.hasMaterial(selected())&&!pbrBaker?.isBusy()
 });
 pbrBaker=setupPbrBaker({
  getMesh:selected,getPending:()=>pending,getOriginal:mesh=>originals.get(mesh),
- $,notify:msg,canStart:()=>!normalBaker.hasMaterial(selected())
+ $,notify:msg,canStart:()=>!normalBaker.hasMaterial(selected())&&!normalBaker.isBusy()
 });
 function cancelPending(){
   pbrBaker.cancel();
