@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Worker as NodeWorker} from 'node:worker_threads';
 import * as THREE from 'three';
-import {optimizeInBackground} from './optimizer-background.js';
+import {optimizeInBackground,bakeNormalsInBackground} from './optimizer-background.js';
 
 function makeMesh(n){
  const pos=[],uv=[],j=[],w=[],index=[];
@@ -103,4 +103,28 @@ test('QEM WASM runs inside the actual transferred geometry worker and keeps UV a
   assert.equal(result.method.includes('Meshoptimizer'),true);
   result.geometry.dispose();
  }finally{source.dispose();globalThis.Worker=nativeWorker}
+});
+
+test('high-to-low normal-map bake runs inside real transferable background worker',async()=>{
+ globalThis.Worker=NodeBrowserWorker;
+ const high=makeMesh(20),low=makeMesh(5);
+ try{
+  const job=bakeNormalsInBackground(high,low,{size:64,repeat:[1,1]});
+  const result=await job.promise;
+  assert.equal(result.size,64);
+  assert.equal(result.pixels.length,64*64*4);
+  assert.ok(result.hitCount>2500,'BVH must hit original high-poly mesh');
+  assert.equal(high.index.count,20*20*6,'original high-poly unchanged');
+  assert.equal(low.index.count,5*5*6,'low-poly unchanged');
+ }finally{high.dispose();low.dispose();globalThis.Worker=nativeWorker}
+});
+test('high-to-low normal baking can be cancelled with original geometry intact',async()=>{
+ globalThis.Worker=NodeBrowserWorker;
+ const high=makeMesh(75),low=makeMesh(15);
+ try{
+  const job=bakeNormalsInBackground(high,low,{size:128});
+  job.cancel();
+  await assert.rejects(job.promise,/отменено/);
+  assert.equal(high.index.count,75*75*6);
+ }finally{high.dispose();low.dispose();globalThis.Worker=nativeWorker}
 });
