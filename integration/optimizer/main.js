@@ -18,7 +18,9 @@ const ui=[
 '<label>Меш<select id="meshes"></select></label>',
 '<label>Цель: треугольники<select id="presets"><option value="5000">5 000</option><option value="10000">10 000</option><option value="20000" selected>20 000</option><option value="40000">40 000</option><option value="custom">Своя</option></select></label>',
 '<label>Своя цель<input id="target" type="number" value="20000" min="64" step="100"/></label>',
-'<label>Способ упрощения<select id="method"><option value="qem">QEM — сохранить UV и веса без пересчёта (рекомендуется)</option><option value="cluster">Кластеризация — экспериментальная</option></select></label>',
+'<label>Способ упрощения<select id="method"><option value="qem">QEM — качественное упрощение (рекомендуется)</option><option value="cluster">Кластеризация — экспериментальная</option></select></label>',
+'<label>Точность QEM<select id="qem-quality"><option value="0.01">Максимальная защита формы</option><option value="0.025" selected>Сбалансированная</option><option value="0.075">Более сильное упрощение</option></select></label>',
+'<label class="toggle"><input id="qem-attributes" type="checkbox" checked/> Учитывать UV атлас и нормали при выборе граней</label>',
 '<p>Цель действует на выбранный меш, не на весь GLB. Волосы, одежда и тело могут быть разными мешами. Общее число треугольников смотри в статистике.</p>',
 '<label class="toggle"><input id="uv" type="checkbox" checked/> Защищать UV и текстуры</label>',
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
@@ -283,14 +285,16 @@ $('simplify').onclick=async()=>{
   if(!Number.isInteger(target)||target<64)return msg('Задай целевое число треугольников не менее 64.');
   const existing=Math.floor((mesh.geometry.index?.count||mesh.geometry.getAttribute('position').count)/3);
   if(target>=existing)return msg('Выбранный меш уже соответствует цели: '+fmt(existing)+' ≤ '+fmt(target)+'. Если весь персонаж тяжелее, выбери другой меш в списке выше.');
-  msg('Обработка большого меша в отдельном потоке… Исходная модель не изменяется.');
+  if(target<existing*.08)msg('Очень сильное упрощение: цель меньше 8% исходных граней. Проверь лицо, волосы, ремни и одежду.');
+  else msg('Обработка большого меша в отдельном потоке… Исходная модель не изменяется.');
   $('simplify').textContent='✕ Отменить расчёт';
   await new Promise(resolve=>requestAnimationFrame(resolve));
   let job=null;
   try{
     job=optimizeInBackground(mesh.geometry,target,{
       preserveUV:$('uv').checked,protectSkin:$('joint').checked,
-      method:$('method').value,qemError:0.025,
+      method:$('method').value,qemError:Number($('qem-quality').value),
+      attributeAware:$('qem-attributes').checked,
       ...textureSafety(mesh)
     },(attempt,total)=>{
       msg('Оптимизация меша: проход '+attempt+' из примерно '+total+
