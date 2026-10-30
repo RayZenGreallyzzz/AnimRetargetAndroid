@@ -26,3 +26,12 @@ QA4 Optimizer reported "Слишком крупный меш для безопа
 - Cloth-protection masks may block topology-changing optimization; this is deliberate to preserve weight protection.
 - If estimated peak memory still exceeds the tablet RAM budget, user receives an informative warning rather than an unconditional crash. Streaming chunk-by-chunk geometry processing is still not implemented.
 - Need user's original GLB and Android-device visual check of face, hair, clothing and animation before claiming equivalence to cloud Tripo.
+
+## 30 October 2026 — QEM QA7 offline simplification
+- Added a separate, default **meshoptimizer** QEM simplification mode using a WASM module bundled by Vite for offline Android; original vertex clustering remains available.
+- The new method compacts only vertices referenced by the optimized index buffer, while copying UVs, original normals, JOINTS_0, WEIGHTS_0 and material node unchanged; thus no *per-retained-vertex* UV drift or weight blending.
+- Attribute-aware QEM uses normals and UVs with KHR texture-repeat awareness and normalized gltfpack uint16 POSITION values.
+- User can choose stricter/moderate/aggressive QEM error limits and switch attribute-awareness on/off.
+- Exact target is not guaranteed on complex topology with many seams and/or severe requested reduction. Does not regenerate quad loops, UV atlas or bake high-poly detail to low-poly textures, unlike Tripo's cloud retopology.
+- No claim yet for on-device Android frame rate or that real 1,036,252-triangle user model reaches 20,000 with all visual detail preserved.
+- Third-party: meshoptimizer (MIT), Copyright (c) 2016–2026 Arseny Kapoulkine, https://github.com/zeux/meshoptimizer. Attribution required in release/docs.
