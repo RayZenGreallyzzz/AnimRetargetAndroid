@@ -344,6 +344,8 @@ function apply(){
   if(!originals.has(mesh))originals.set(mesh,before);
   else if(before!==originals.get(mesh))before.dispose();
   mesh.geometry=geometry;pending=null;mesh.geometry.computeBoundingSphere();
+  normalBaker.showPreview(mesh,true);
+  pbrBaker.showPreview(mesh,true);
   detailMasks.delete(mesh);disableDetailPainting();updateDetailOverlay();
   $('compare').disabled=true;
   selectedStats();updateCapsules();
@@ -415,6 +417,10 @@ $('compare').onclick=()=>{
   if(!pending)return;
   const showingAfter=pending.mesh.geometry===pending.geometry;
   pending.mesh.geometry=showingAfter?pending.before:pending.geometry;
+  // The visual before/after must swap the original PBR and normal maps too:
+  // geometry-only comparisons otherwise show the low-poly bake on "ДО".
+  normalBaker.showPreview(pending.mesh,!showingAfter);
+  pbrBaker.showPreview(pending.mesh,!showingAfter);
   $('compare').textContent=showingAfter?'Сравнение: ДО (показать ПОСЛЕ)':'Сравнение: ПОСЛЕ (показать ДО)';
   selectedStats();updateCapsules();
 };
