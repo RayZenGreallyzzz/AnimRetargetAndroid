@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {simplifyQEM} from './meshopt-qem.js';
+import {paintDetailSphere,countLocked} from './detail-locks.js';
 
 function makeGrid(n){
  const pos=[],uv=[],weights=[],joints=[],indices=[];
@@ -111,4 +112,41 @@ test('million-triangle stress: offline QEM processes Tripo-size geometry while r
  assert.ok(out.geometry.getAttribute('uv'));
  assert.ok(out.geometry.getAttribute('skinWeight'));
  out.geometry.dispose();g.dispose();
+});
+
+test('protected detail brush keeps selected face/hair vertices through QEM',async()=>{
+ const original=makeGrid(90),p=original.getAttribute('position');
+ const mask=new Uint8Array(p.count);
+ const changed=paintDetailSphere(original,mask,{x:.5,y:.7,z:.02},.075,true);
+ assert.ok(changed>100&&changed<2000,'local face protection must be selective');
+ assert.equal(countLocked(mask),changed);
+ const before=new Set();
+ for(let i=0;i<mask.length;i++)if(mask[i])before.add([
+  p.getX(i).toFixed(7),p.getY(i).toFixed(7),p.getZ(i).toFixed(7)].join(':'));
+ const out=await simplifyQEM(original,5000,{attributeAware:true,qemError:.15,protectedVertices:mask});
+ assert.ok(out.geometry,out.reason);
+ assert.equal(out.protectedCount,changed);
+ assert.equal(out.lockedKept,changed);
+ const pos=out.geometry.getAttribute('position'),still=new Set();
+ for(let i=0;i<pos.count;i++)still.add([
+  pos.getX(i).toFixed(7),pos.getY(i).toFixed(7),pos.getZ(i).toFixed(7)].join(':'));
+ for(const vertex of before)assert.ok(still.has(vertex),'protected source vertex absent from QEM output');
+ out.geometry.dispose();original.dispose();
+});
+test('detail protection fails closed after geometry vertex count changes',async()=>{
+ const g=makeGrid(25);
+ const bad=new Uint8Array(37);
+ const out=await simplifyQEM(g,300,{protectedVertices:bad});
+ assert.match(out.reason,/Маска защиты деталей/);
+ g.dispose();
+});
+test('spherical detail mask can be erased without damaging original geometry',()=>{
+ const g=makeGrid(40),mask=new Uint8Array(g.getAttribute('position').count),before=g.getAttribute('position').getX(10);
+ const marked=paintDetailSphere(g,mask,{x:.4,y:.4,z:0},.1,true);
+ assert.ok(marked>0);
+ const removed=paintDetailSphere(g,mask,{x:.4,y:.4,z:0},.1,false);
+ assert.equal(removed,marked);
+ assert.equal(countLocked(mask),0);
+ assert.equal(g.getAttribute('position').getX(10),before);
+ g.dispose();
 });
