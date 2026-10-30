@@ -20,7 +20,8 @@ function getTexturePixels(texture){
   throw Error('Сжатая GPU-текстура не поддерживается: '+(texture.name||'без имени'));
  const image=texture?.image||texture?.source?.data;
  const width=Number(image?.width||0),height=Number(image?.height||0);
- if(!width||!height||width>8192||height>8192)throw Error('Нет изображения или слишком большая текстура');
+ if(!width||!height||width>4096||height>4096)
+  throw Error('Карта '+width+' × '+height+' превышает безопасный предел 4096 px на планшете.');
  const canvas=document.createElement('canvas');
  canvas.width=width;canvas.height=height;
  const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -158,7 +159,11 @@ export function setupPbrBaker({getMesh,getPending,getOriginal,$,notify,canStart}
     if(!tex)continue;
     originalMapByKey.set(key,tex);
     if(!reference)reference=tex;
-    options.push(textureToWorker(key,tex));
+    const source=textureToWorker(key,tex);
+    options.push(source);
+    const bytes=options.reduce((sum,m)=>sum+m.pixels.byteLength,0);
+    if(bytes>80*1048576)
+     throw Error('В выбранных PBR-картах больше 80 МБ распакованных пикселей. Сними часть галочек, чтобы избежать вылета Android.');
    }
    if(options.length===0)return report('У выбранного меша нет отмеченных PBR-текстур.');
    const repeat=[reference.repeat?.x||1,reference.repeat?.y||1];
