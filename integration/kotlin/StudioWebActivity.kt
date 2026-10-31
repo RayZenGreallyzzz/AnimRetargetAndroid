@@ -39,6 +39,9 @@ class StudioWebActivity : Activity() {
     private val allowedDomain = "appassets.androidplatform.net"
     private lateinit var container: FrameLayout
     private val views = mutableMapOf<String, WebView>()
+    // Only keep the outgoing editor during the FIRST Character GLB import.
+    // If that load fails, the Rig scene is still available to return to.
+    private var handoffRetained: String? = null
     @Volatile private var selected = "optimize"
     fun currentTool(): String = selected
     private var uploadCallback: android.webkit.ValueCallback<Array<Uri>>? = null
@@ -77,16 +80,19 @@ class StudioWebActivity : Activity() {
         }
         val next = if (name in setOf("character", "optimize")) name else "rig"
         if (next == selected && views[next]?.visibility == android.view.View.VISIBLE) return
+        val previous = selected
+        handoffRetained = if (next == "character" && previous != "character" &&
+            bridge.latestActiveGlb() != null) previous else null
         views[selected]?.apply {
             onPause()
             visibility = android.view.View.GONE
         }
-        // Android tablets with 4 GB RAM cannot reliably keep three heavy
-        // WebGL scenes plus the native Retarget activity resident. Previous
-        // editor has already published a full shared GLB through the
-        // save-before-navigation contract. Reopen from that GLB when revisited.
+        // Do not destroy the outgoing Rig before Character CONFIRMS that its
+        // new 3D scene loaded. Earlier versions closed Rig immediately, so an
+        // import error left the user with an empty Character and no way back.
+        // Other inactive editors are still released to conserve tablet RAM.
         if (bridge.latestActiveGlb() != null && next != selected) {
-            val staleKeys = views.keys.filter { it != next }.toList()
+            val staleKeys = views.keys.filter { it != next && it != handoffRetained }.toList()
             for (key in staleKeys) {
                 val stale = views.remove(key) ?: continue
                 container.removeView(stale)
@@ -106,6 +112,25 @@ class StudioWebActivity : Activity() {
         web.onResume()
         // Notify an already-loaded editor that another module has published a newer GLB.
         web.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
+    }
+
+    fun confirmEditorModelLoaded(editor: String, revision: Long) {
+        // Called only after the Character JS loader has finished parsing,
+        // installing the model and checking a real skeleton.
+        if (editor != "character" || selected != editor || revision <= 0L) return
+        val activeRevision = try {
+            JSONObject(bridge.getActiveFileJson()).optLong("revision", -1L)
+        } catch (_: Exception) { -1L }
+        if (revision != activeRevision) return
+        val retained = handoffRetained ?: return
+        handoffRetained = null
+        if (retained == selected) return
+        val old = views.remove(retained) ?: return
+        old.onPause()
+        container.removeView(old)
+        old.stopLoading()
+        old.removeJavascriptInterface("PhoenixNative")
+        old.destroy()
     }
 
     /**
@@ -379,6 +404,12 @@ private class PhoenixWorkspaceBridge(private val app: StudioWebActivity) {
     fun openTool(tool: String) {
         if (tool !in setOf("rig", "retarget", "character", "optimize")) return
         app.runOnUiThread { app.openTool(tool) }
+    }
+
+    @JavascriptInterface
+    fun editorLoaded(tool: String, revision: Long) {
+        if (tool != "character" || revision <= 0L) return
+        app.runOnUiThread { app.confirmEditorModelLoaded(tool, revision) }
     }
 
     @JavascriptInterface
