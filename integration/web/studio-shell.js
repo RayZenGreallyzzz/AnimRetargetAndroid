@@ -154,18 +154,35 @@
       input.dispatchEvent(new Event("change",{bubbles:true}));
     }
   }
+  function activeWorkspaceEntry(){
+    try{return JSON.parse(call("getActiveFileJson")||"{}")}
+    catch{return {}}
+  }
+  async function verifyRigHandoff(next){
+    if(next!=="character"&&next!=="retarget")return;
+    const entry=activeWorkspaceEntry();
+    if(!entry.name){
+      if(next==="character")throw Error("Нет общего GLB. Сначала загрузи персонажа в Rig и экспортируй полную модель.");
+      return; // Retarget can be opened as a standalone editor.
+    }
+    const guard=window.PhoenixGlbGuard;
+    if(!guard?.requireCharacterReady)
+      throw Error("Проверка GLB не загрузилась. Переход остановлен, персонаж сохранён.");
+    const info=await guard.requireCharacterReady(native,entry);
+    toast("GLB проверен: "+info.skinnedMeshes+" мешей со скелетом · "+info.animations+" анимаций");
+  }
   async function commitRigBeforeLeave(next){
     const state=window.PhoenixSync?.getState?.()||{};
+    const beforeEntry=activeWorkspaceEntry();
     const button=document.getElementById("export-button");
     const exportReady=button && !button.disabled &&
       !!(button.getClientRects?.().length);
     if(!exportReady){
-      let active=null;
-      try{active=JSON.parse(call("getActiveFileJson")||"{}")}catch{}
-      if(state.dirty || (state.hasModel && active?.origin==="optimize" && next!=="optimize")){
-        throw Error("Rig ещё не сохранил персонажа со скелетом в общий GLB. Открой «Анимации → Экспорт», выбери «GLB / Полная модель + анимации» и повтори переход.");
-      }
-      // No edits, previously committed shared GLB: don't export a blank demo.
+      if(state.dirty)
+        throw Error("Rig содержит несохранённые изменения: заверши экспорт полной GLB-модели.");
+      // Validate the actual GLB even if no new export was requested.
+      // A filename or workspace revision does not prove the model has skin weights.
+      await verifyRigHandoff(next);
       return;
     }
     // Always transfer the current complete skinned mesh (not skeleton-only or FBX).
@@ -195,6 +212,18 @@
     try{
       toast("Сохраняю кости, веса и анимации из Rig в общий GLB…");
       await committed;
+      // The export event alone is NOT proof of a valid rigged character.
+      // Check the GLB JSON without copying its heavy geometry into memory.
+      try{await verifyRigHandoff(next)}
+      catch(error){
+        const now=activeWorkspaceEntry();
+        if(beforeEntry?.name && now.revision>beforeEntry.revision){
+          // Preserve the last known working shared file if Rig exported a bad one.
+          call("setActiveFile",beforeEntry.name,beforeEntry.origin||"rig");
+          window.dispatchEvent(new Event("phoenix:workspace-updated"));
+        }
+        throw error;
+      }
       window.PhoenixSync?.markSaved?.(currentSharedRevision());
     }finally{unsubscribe=null}
   }
@@ -213,13 +242,24 @@
       } else if(tool==="character"){
         if(typeof window.PhoenixCharacterSave!=="function")
           throw Error("Character ещё не готов сохранить персонажа.");
-        await window.PhoenixCharacterSave();
+        if(typeof window.PhoenixCharacterHasModel==="function" &&
+           !window.PhoenixCharacterHasModel()){
+          // A failed/unfinished import must NOT trap the user in Character:
+          // go back to Rig without publishing a blank/demo GLB.
+          if(window.PhoenixSync?.getState?.()?.dirty)
+            throw Error("Character имеет несохранённые изменения.");
+        } else {
+          await window.PhoenixCharacterSave();
+        }
       } else if(tool==="rig"){
         await commitRigBeforeLeave(next);
       }
       const state=window.PhoenixSync?.getState?.();
       if(state?.dirty)
         throw Error("Изменения остались несохранёнными; автоматический переход остановлен.");
+      // A user can tap Character directly from Optimize. Do not bypass the
+      // same verified-rig requirement just because navigation skipped Rig.
+      if(next==="character" && tool!=="rig")await verifyRigHandoff(next);
       call("openTool",next);
     }catch(error){
       toast("Переход остановлен: "+(error?.message||String(error)));

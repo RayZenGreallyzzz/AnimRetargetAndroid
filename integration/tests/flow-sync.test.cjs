@@ -8,6 +8,8 @@ const wait=()=>new Promise(resolve=>setTimeout(resolve,10));
 function createNative(){
  let active=null,pending=[],revision=0,saveName='';
  return {
+  acknowledgements:[],
+  editorLoaded(tool,revision){this.acknowledgements.push({tool,revision})},
   getActiveFileJson:()=>JSON.stringify(active||{}),
   beginSave:(name,size)=>{saveName=name;pending=[];return 't'},
   appendSaveChunk:(token,base64)=>{if(token!=='t')return false;pending.push(Buffer.from(base64,'base64'));return true},
@@ -141,4 +143,35 @@ test('Character importer readiness prevents false model-loaded confirmation',asy
  assert.equal(char.window.PhoenixSync.getState().hasModel,true);
  assert.equal(char.window.PhoenixSync.getState().revision,1);
  assert.equal(char.loadCalls[0].inputId,'base-file');
+});
+
+test('native Rig WebView is released only after Character confirms actual GLB load',async()=>{
+ const native=createNative(),bytes=Buffer.from('mock source');
+ const file={name:'cow.glb',size:bytes.length,slice(a,b){
+  return {arrayBuffer:async()=>Uint8Array.from(bytes.subarray(a,b)).buffer}
+ }};
+ const optimize=mountEditor('optimize',native,file);
+ optimize.docEvents.change({target:optimize.input,isTrusted:true});
+ await wait();await wait();
+ const char=mountEditor('character',native);
+ assert.equal(native.acknowledgements.length,0,'must not acknowledge before import');
+ char.fireReady();await wait();
+ assert.equal(native.acknowledgements.length,1);
+ assert.equal(native.acknowledgements[0].tool,'character');
+ assert.equal(native.acknowledgements[0].revision,1);
+});
+
+test('a failed Character load cannot tell native to free the working Rig',async()=>{
+ const native=createNative(),bytes=Buffer.from('mock source');
+ const file={name:'cow.glb',size:bytes.length,slice(a,b){
+  return {arrayBuffer:async()=>Uint8Array.from(bytes.subarray(a,b)).buffer}
+ }};
+ const optimize=mountEditor('optimize',native,file);
+ optimize.docEvents.change({target:optimize.input,isTrusted:true});
+ await wait();await wait();
+ const char=mountEditor('character',native);
+ char.window.PhoenixSuite.useWorkspaceFile=async()=>{throw Error('broken skin weights')};
+ char.fireReady();await wait();
+ assert.equal(native.acknowledgements.length,0);
+ assert.equal(char.window.PhoenixSync.getState().hasModel,false);
 });

@@ -4,6 +4,7 @@ on:
     branches:
       - feature/phoenix-one-autolod-surface-check-20261031
       - fix/forge-one-handoff-and-autolod-20261031
+      - fix/forge-one-verified-glb-handoff-20261031
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,6 +26,8 @@ jobs:
         run: |
           node --check integration/web/studio-shell.js
           node --check integration/web/studio-sync.js
+          node --check integration/web/glb-guard.js
+          node --test integration/tests/glb-guard.test.cjs
           node --test integration/tests/flow-sync.test.cjs
           python3 -m unittest integration.tests.test_character_handoff_patch -v
       - name: Compile optimizer bundle

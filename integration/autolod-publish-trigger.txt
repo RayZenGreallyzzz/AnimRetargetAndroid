@@ -5,3 +5,5 @@ Package suffix: .suiteautolod.
 Retry prerelease APK publication with corrected artifact ZIP Accept header.
 
 Publish 2026-10-31 Phoenix Forge ONE HANDOFF TEST from verified full Android build 41208642286, separate package .suitehandoff.
+
+Publish 2026-10-31 VERIFIED GLB HANDOFF test APK from successful signed build 41236498365. Separate package .suiteverified, no mainline merge.
