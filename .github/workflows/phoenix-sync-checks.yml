@@ -35,6 +35,7 @@ jobs:
           test -s /tmp/forge-woman/src/retarget-compat.js
           grep -q 'id="body-skin"' /tmp/forge-woman/src/main.js
           cd /tmp/forge-woman
+          python3 "$GITHUB_WORKSPACE/integration/patch_character_handoff.py" /tmp/forge-woman
           npm install --no-audit --no-fund
           npm test
           npm run build -- --base=./
