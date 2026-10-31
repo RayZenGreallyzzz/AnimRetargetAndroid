@@ -23,6 +23,21 @@ class HandoffPackagingTest(unittest.TestCase):
         self.assertLess(shell.index("await commitRigBeforeLeave(next)"),shell.index('call("openTool",next)'))
         self.assertIn('call("setActiveFile",beforeEntry.name',shell)
 
+    def test_rig_is_not_destroyed_until_character_import_ack(self):
+        native=(ROOT/"kotlin/StudioWebActivity.kt").read_text()
+        sync=(ROOT/"web/studio-sync.js").read_text()
+        self.assertIn('it != next && it != handoffRetained',native)
+        self.assertIn('fun confirmEditorModelLoaded(editor: String, revision: Long)',native)
+        self.assertIn('revision != activeRevision',native)
+        self.assertIn('fun editorLoaded(tool: String, revision: Long)',native)
+        self.assertIn('bridge.editorLoaded(tool,active.revision)',sync)
+
+    def test_character_can_return_to_rig_on_failed_load(self):
+        shell=(ROOT/"web/studio-shell.js").read_text()
+        patch=(ROOT/"patch_character_handoff.py").read_text()
+        self.assertIn('!window.PhoenixCharacterHasModel()',shell)
+        self.assertIn('window.PhoenixCharacterHasModel=',patch)
+
     def test_full_apk_injector_bundles_guard(self):
         injection=(ROOT/"inject_shell.py").read_text()
         self.assertIn('target / "glb-guard.js"',injection)
