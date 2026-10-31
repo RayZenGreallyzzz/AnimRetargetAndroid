@@ -1,0 +1,25 @@
+name: Phoenix AutoLOD Quality Checks
+on:
+  push:
+    branches:
+      - feature/phoenix-one-autolod-surface-check-20261031
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  optimizer-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install optimizer dependencies
+        working-directory: integration/optimizer
+        run: npm install --no-audit --no-fund
+      - name: Run geometry regression tests
+        working-directory: integration/optimizer
+        run: npm test
+      - name: Compile optimizer bundle
+        working-directory: integration/optimizer
+        run: npm run build
