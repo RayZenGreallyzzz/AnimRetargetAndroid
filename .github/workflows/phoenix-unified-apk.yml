@@ -65,6 +65,8 @@ jobs:
       - name: Test and build Character Studio web module
         working-directory: /tmp/phoenix-character
         run: |
+          python3 "$GITHUB_WORKSPACE/integration/patch_character_handoff.py" /tmp/phoenix-character
+          grep -q 'PhoenixCharacterImport' src/main.js
           npm install --no-audit --no-fund
           npm test
           test -s src/retarget-compat.js
