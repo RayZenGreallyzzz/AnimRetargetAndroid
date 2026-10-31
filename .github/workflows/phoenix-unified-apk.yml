@@ -4,7 +4,7 @@ on:
   # After the verified release asset is uploaded, updating the trigger file
   # starts an APK build without any UI workflow-dispatch dependency.
   push:
-    branches: [integration/phoenix-character-suite]
+    branches: [integration/phoenix-character-suite, feature/phoenix-one-autolod-surface-check-20261031]
     paths:
       - 'integration/release-build-trigger.txt'
   workflow_dispatch:
