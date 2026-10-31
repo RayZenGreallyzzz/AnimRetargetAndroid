@@ -242,13 +242,24 @@
       } else if(tool==="character"){
         if(typeof window.PhoenixCharacterSave!=="function")
           throw Error("Character ещё не готов сохранить персонажа.");
-        await window.PhoenixCharacterSave();
+        if(typeof window.PhoenixCharacterHasModel==="function" &&
+           !window.PhoenixCharacterHasModel()){
+          // A failed/unfinished import must NOT trap the user in Character:
+          // go back to Rig without publishing a blank/demo GLB.
+          if(window.PhoenixSync?.getState?.()?.dirty)
+            throw Error("Character имеет несохранённые изменения.");
+        } else {
+          await window.PhoenixCharacterSave();
+        }
       } else if(tool==="rig"){
         await commitRigBeforeLeave(next);
       }
       const state=window.PhoenixSync?.getState?.();
       if(state?.dirty)
         throw Error("Изменения остались несохранёнными; автоматический переход остановлен.");
+      // A user can tap Character directly from Optimize. Do not bypass the
+      // same verified-rig requirement just because navigation skipped Rig.
+      if(next==="character" && tool!=="rig")await verifyRigHandoff(next);
       call("openTool",next);
     }catch(error){
       toast("Переход остановлен: "+(error?.message||String(error)));
