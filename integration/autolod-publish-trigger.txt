@@ -1,0 +1,5 @@
+Publish isolated Phoenix Forge ONE AutoLOD TEST APK from successful full Android run 41155006824.
+Verified full APK build conclusion: success.
+Package suffix: .suiteautolod.
+
+Retry prerelease APK publication with corrected artifact ZIP Accept header.

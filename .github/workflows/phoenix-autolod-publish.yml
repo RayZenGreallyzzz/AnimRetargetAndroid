@@ -1,0 +1,56 @@
+name: Publish Phoenix Forge ONE AutoLOD TEST APK
+on:
+  push:
+    branches: [feature/phoenix-one-autolod-surface-check-20261031]
+    paths: ['integration/autolod-publish-trigger.txt']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch verified Android APK artifact from isolated full build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: '41155006824'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${SOURCE_RUN}" =~ ^[0-9]+$ ]]
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$API/actions/runs/$SOURCE_RUN" -o /tmp/run.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/run.json'))
+          assert d.get('conclusion')=='success', 'Full Android build is not successful'
+          assert d.get('head_branch')=='feature/phoenix-one-autolod-surface-check-20261031', 'Wrong branch'
+          print('Verified source run',d['id'])
+          PY
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$API/actions/runs/$SOURCE_RUN/artifacts" -o /tmp/artifacts.json
+          ASSET_ID="$(python3 - <<'PY'
+          import json
+          a=[x for x in json.load(open('/tmp/artifacts.json'))['artifacts'] if x['name']=='PhoenixCharacterForge-ONE-APK' and not x.get('expired')]
+          assert len(a)==1,'Missing or duplicate APK artifact'
+          print(a[0]['id'])
+          PY
+          )"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$API/actions/artifacts/$ASSET_ID/zip" -o /tmp/apk-artifact.zip
+          mkdir -p /tmp/autolod
+          unzip -q /tmp/apk-artifact.zip -d /tmp/autolod
+          SRC="$(find /tmp/autolod -type f -name '*.apk' | head -n 1)"
+          test -n "$SRC"
+          cp "$SRC" Phoenix-Forge-ONE-AutoLOD-TEST.apk
+          test -s Phoenix-Forge-ONE-AutoLOD-TEST.apk
+          sha256sum Phoenix-Forge-ONE-AutoLOD-TEST.apk
+      - name: Publish direct test APK link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create phoenix-one-autolod-test-20261031 Phoenix-Forge-ONE-AutoLOD-TEST.apk \
+            --target "$GITHUB_SHA" --title "Phoenix Forge ONE — AutoLOD TEST (12k–50k)" \
+            --prerelease \
+            --notes "Отдельная тестовая Android-сборка (не заменяет установленную Forge ONE). Автооптимизация всего персонажа с распределением 12–50 тыс. треугольников, отменой и контролем поверхности. Rig 7.6 / Character / Retarget объединены. Протестировано CI, но на реальном GLB коровки на Android ещё не проверено. Исходный файл всегда сохраняйте отдельно."

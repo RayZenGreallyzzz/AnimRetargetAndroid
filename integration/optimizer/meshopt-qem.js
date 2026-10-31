@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {MeshoptSimplifier} from 'meshoptimizer';
+import {compareSurfaces} from './surface-quality.js';
 
 /**
  * Offline edge-collapse/QEM geometry simplification.
@@ -107,9 +108,21 @@ export async function simplifyQEM(g,target,options={}){
   old.length<=65535?Uint16Array.from(newIndex):Uint32Array.from(newIndex),1));
  if(g.groups.length===1)geometry.addGroup(0,newIndex.length,g.groups[0].materialIndex);
  geometry.computeBoundingBox();geometry.computeBoundingSphere();
+ // Check the actual resulting surface: unchanged retained vertex coordinates
+ // do NOT mean unchanged character silhouette or volume.
+ let surface;
+ try { surface=compareSurfaces(g,geometry); }
+ catch(error){geometry.dispose();return {reason:'Ошибка контроля поверхности: '+error.message};}
+ if(!surface.accepted){
+  geometry.dispose();
+  return {reason:'Контроль качества отклонил результат: '+surface.reason+
+   (surface.maxFraction!==undefined?' (макс. отклонение '+(surface.maxFraction*100).toFixed(2)+'% диагонали).':'')};
+ }
  return {geometry,vertices:old.length,triangles:reduced.length/3,
   originalTriangles:triCount,target,targetErrorPercent:Math.round(10000*((reduced.length/3)-target)/target)/100,
   qemError:metric,attempts:1,maxUvMovementTexels:0,maxMovementPercent:0,
+  surfaceMaxPercent:Number((surface.maxFraction*100).toFixed(3)),
+  surfaceRmsPercent:Number((surface.rmsFraction*100).toFixed(3)),
   method:useAttributes?'Meshoptimizer QEM with UV/normal-aware error': 'Meshoptimizer QEM (UV and weights copied without averaging)',
   attributeAware:!!useAttributes,protectedCount,lockedKept};
 }
