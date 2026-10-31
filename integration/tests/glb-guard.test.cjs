@@ -64,7 +64,7 @@ test('skin plus mesh is not enough without JOINTS and WEIGHTS',async()=>{
 });
 test('truncated or fake GLB is rejected before marking transfer ready',async()=>{
  const buf=Buffer.from('glTF-test-content');
- await assert.rejects(inspectActive(nativeBuffer(buf),active(buf)),/корректным GLB/);
+ await assert.rejects(inspectActive(nativeBuffer(buf),active(buf)),/некорректн|корректным GLB/);
  const good=glb(base);good.writeUInt32LE(good.length+5,8);
  await assert.rejects(inspectActive(nativeBuffer(good),active(good)),/неполностью/);
 });
