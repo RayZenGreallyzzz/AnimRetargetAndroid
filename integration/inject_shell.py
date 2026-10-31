@@ -132,8 +132,12 @@ def integrate(project: Path, rig_dist: Path, character_dist: Path, integration_r
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, target)
         patch_branding(target / entrypoint, name)
+        # Gate must load before shell to validate actual GLB metadata.
+        patch_html(target / entrypoint, "glb-guard.js")
         patch_html(target / entrypoint, "studio-shell.js")
         patch_html(target / entrypoint, "studio-sync.js")
+        shutil.copyfile(integration_root / "web/glb-guard.js",
+                        target / "glb-guard.js")
         shutil.copyfile(integration_root / "web/studio-shell.js",
                         target / "studio-shell.js")
         shutil.copyfile(integration_root / "web/studio-sync.js",
