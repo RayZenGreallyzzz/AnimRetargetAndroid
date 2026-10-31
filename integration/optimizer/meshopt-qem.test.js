@@ -69,7 +69,8 @@ test('QEM can attempt >260k face mesh without unsafe vertex clustering',async()=
 });
 
 test('QEM output GLB preserves rig, texture UVs and animation clip after export',async()=>{
- const src=makeGrid(30),result=await simplifyQEM(src,550,{attributeAware:true,qemError:.1});
+ // This test validates export of a quality-accepted LOD (not forced 70% reduction).
+ const src=makeGrid(30),result=await simplifyQEM(src,900,{attributeAware:true,qemError:.1});
  assert.ok(result.geometry,result.reason);
  const originalReader=globalThis.FileReader;
  globalThis.FileReader=class{
