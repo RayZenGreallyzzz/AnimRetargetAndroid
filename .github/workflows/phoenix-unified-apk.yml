@@ -4,7 +4,7 @@ on:
   # After the verified release asset is uploaded, updating the trigger file
   # starts an APK build without any UI workflow-dispatch dependency.
   push:
-    branches: [integration/phoenix-character-suite, feature/phoenix-one-autolod-surface-check-20261031, fix/forge-one-handoff-and-autolod-20261031]
+    branches: [integration/phoenix-character-suite, feature/phoenix-one-autolod-surface-check-20261031, fix/forge-one-handoff-and-autolod-20261031, fix/forge-one-verified-glb-handoff-20261031]
     paths:
       - 'integration/release-build-trigger.txt'
   workflow_dispatch:
@@ -99,6 +99,8 @@ jobs:
         run: |
           node --check integration/web/studio-shell.js
           node --check integration/web/studio-sync.js
+          node --check integration/web/glb-guard.js
+          node --test integration/tests/glb-guard.test.cjs
           node --test integration/tests/flow-sync.test.cjs
           python3 -m unittest integration.tests.test_rig_shared_export -v
           python3 -m unittest discover -s integration/tests -v
@@ -127,6 +129,9 @@ jobs:
         run: |
           python3 -m py_compile integration/inject_shell.py
           python3 integration/inject_shell.py AnimRetargetAndroid /tmp/phoenix-rig/dist /tmp/phoenix-character/dist integration/optimizer/dist
+          test -s AnimRetargetAndroid/app/src/main/assets/studio/optimize/glb-guard.js
+          grep -q 'glb-guard.js' AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
+          grep -q 'glb-guard.js' AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/optimize/index.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/rig/create.html
           test -s AnimRetargetAndroid/app/src/main/assets/studio/character/index.html
