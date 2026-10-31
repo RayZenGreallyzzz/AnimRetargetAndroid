@@ -58,11 +58,21 @@ class StudioWebActivity : Activity() {
 
     fun openTool(name: String) {
         if (name == "retarget") {
-            // The same saved workspace character is the Retarget input too.
-            // No second file chooser or "open with character" dialog.
+            // Native retarget reads the exact same app-private GLB on startup.
+            // A heavy WebGL scene left resident can OOM the native parser.
             val current = bridge.latestActiveGlb()
-            if(current != null)launchNativeRetargetWorkspace(current)
-            else launchNativeRetarget()
+            val launched = if(current != null) launchNativeRetargetWorkspace(current)
+                           else launchNativeRetarget()
+            if (launched && current != null) {
+                for(key in views.keys.toList()) {
+                    val previous = views.remove(key) ?: continue
+                    previous.onPause()
+                    container.removeView(previous)
+                    previous.stopLoading()
+                    previous.removeJavascriptInterface("PhoenixNative")
+                    previous.destroy()
+                }
+            }
             return
         }
         val next = if (name in setOf("character", "optimize")) name else "rig"
@@ -204,10 +214,10 @@ class StudioWebActivity : Activity() {
         return web
     }
 
-    private fun launchNativeRetargetWorkspace(file: File) {
+    private fun launchNativeRetargetWorkspace(file: File): Boolean {
         if (!file.isFile || !file.name.endsWith(".glb", ignoreCase = true)) {
             Toast.makeText(this, "Нет активного GLB для Retarget", Toast.LENGTH_SHORT).show()
-            return
+            return false
         }
         try {
             val next = Intent().setClassName(this, "__NATIVE_RETARGET_ACTIVITY__")
@@ -215,12 +225,14 @@ class StudioWebActivity : Activity() {
             // inside this same APK's app-private workspace.
             next.putExtra("phoenix_shared_glb_name", file.name)
             startActivity(next)
+            return true
         } catch (e: Exception) {
             Toast.makeText(this, "Retarget: " + e.message, Toast.LENGTH_LONG).show()
+            return false
         }
     }
 
-    private fun launchNativeRetarget(uri: Uri? = null) {
+    private fun launchNativeRetarget(uri: Uri? = null): Boolean {
         try {
             val next = Intent().setClassName(this, "__NATIVE_RETARGET_ACTIVITY__")
             if (uri != null) {
@@ -229,8 +241,10 @@ class StudioWebActivity : Activity() {
                 next.putExtra("phoenix_shared_glb_uri", uri.toString())
             }
             startActivity(next)
+            return true
         } catch (e: Exception) {
             Toast.makeText(this, "Ретаргетинг: " + e.message, Toast.LENGTH_LONG).show()
+            return false
         }
     }
 
@@ -296,8 +310,14 @@ class StudioWebActivity : Activity() {
     }
     override fun onResume() {
         super.onResume()
-        views[selected]?.onResume()
-        views[selected]?.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
+        // Native Retarget releases the paused WebGL views to save RAM.
+        // Rebuild the Forge editor from the last complete shared GLB on return.
+        if (views[selected] == null) {
+            openTool(selected)
+        } else {
+            views[selected]?.onResume()
+            views[selected]?.evaluateJavascript("window.dispatchEvent(new Event('phoenix:activated'))", null)
+        }
     }
     override fun onBackPressed() {
         // Android Back must run the SAME save-before-navigation contract as
