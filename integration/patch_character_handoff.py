@@ -11,6 +11,7 @@ import sys
 ANCHOR = """$('base-file').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{await loadBase(new Uint8Array(await f.arrayBuffer()),f.name);}catch(e){err(e);}e.target.value='';});"""
 
 REPLACEMENT = """// Integrated Forge MUST await the actual GLB parse, skeleton check and scene mount.
+window.PhoenixCharacterHasModel=()=>!!state.root && !state.demo && getBones(state.root).length>0;
 window.PhoenixCharacterImport=async file=>{
  if(!file || !/\\.glb$/i.test(file.name))throw Error('Character: нужен GLB персонажа');
  const bytes=new Uint8Array(await file.arrayBuffer());
