@@ -252,6 +252,9 @@
     document.addEventListener("change", trackLocalEdit, true);
     document.addEventListener("input", trackLocalEdit, true);
     window.addEventListener("phoenix:activated", onReactivated);
+    // Trigger another import when the actual Character Three.js module finishes
+    // initializing (it can load after the 600ms/2000ms attempts on Android).
+    window.addEventListener("phoenix:character-import-ready", onReactivated);
     window.addEventListener("phoenix:workspace-updated", () => {
       const active = getActive();
       if (active && active.origin === tool) {
