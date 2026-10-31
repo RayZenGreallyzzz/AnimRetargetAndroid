@@ -121,6 +121,17 @@
       }
       file=new File(blocks,name,{type:mime});
     }
+    if(tool==="character" && targetId==="base-file") {
+      // Character's original input onchange handler is async, but synthetic
+      // dispatchEvent returns immediately and was falsely treated as success.
+      // Await the explicitly exported importer instead.
+      if(typeof window.PhoenixCharacterImport!=="function")
+        throw Error("Character ещё не загрузился. Повтори переход во вкладку.");
+      const result=await window.PhoenixCharacterImport(file);
+      if(!result?.bones)throw Error("Character не подтвердил загрузку скелета.");
+      toast("Character: загружен "+name+" · "+result.bones+" костей");
+      return result;
+    }
     const transfer=new DataTransfer();
     transfer.items.add(file);
     target.files=transfer.files;
@@ -129,7 +140,7 @@
     target.dataset.phoenixWorkspaceImport="1";
     try{target.dispatchEvent(new Event("change",{bubbles:true}))}
     finally{delete target.dataset.phoenixWorkspaceImport;}
-    toast("Загружено в "+({rig:"Rig",character:"Character",optimize:"Optimize"}[tool]||tool)+": "+name);
+    toast("Отправлено в "+({rig:"Rig",character:"Character",optimize:"Optimize"}[tool]||tool)+": "+name);
   }
   let navigationBusy=false;
   function currentSharedRevision(){
