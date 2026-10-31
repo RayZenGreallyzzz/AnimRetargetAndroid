@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/phoenix-one-autolod-surface-check-20261031
+      - fix/forge-one-handoff-and-autolod-20261031
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,6 +21,12 @@ jobs:
       - name: Run geometry regression tests
         working-directory: integration/optimizer
         run: npm test
+      - name: Test shared GLB tab synchronization
+        run: |
+          node --check integration/web/studio-shell.js
+          node --check integration/web/studio-sync.js
+          node --test integration/tests/flow-sync.test.cjs
+          python3 -m unittest integration.tests.test_character_handoff_patch -v
       - name: Compile optimizer bundle
         working-directory: integration/optimizer
         run: npm run build

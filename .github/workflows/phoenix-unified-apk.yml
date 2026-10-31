@@ -4,7 +4,7 @@ on:
   # After the verified release asset is uploaded, updating the trigger file
   # starts an APK build without any UI workflow-dispatch dependency.
   push:
-    branches: [integration/phoenix-character-suite, feature/phoenix-one-autolod-surface-check-20261031]
+    branches: [integration/phoenix-character-suite, feature/phoenix-one-autolod-surface-check-20261031, fix/forge-one-handoff-and-autolod-20261031]
     paths:
       - 'integration/release-build-trigger.txt'
   workflow_dispatch:
@@ -65,6 +65,8 @@ jobs:
       - name: Test and build Character Studio web module
         working-directory: /tmp/phoenix-character
         run: |
+          python3 "$GITHUB_WORKSPACE/integration/patch_character_handoff.py" /tmp/phoenix-character
+          grep -q 'PhoenixCharacterImport' src/main.js
           npm install --no-audit --no-fund
           npm test
           test -s src/retarget-compat.js
@@ -152,17 +154,17 @@ jobs:
           content = gradle.read_text(encoding="utf-8")
           old = 'applicationIdSuffix = ".suite"'
           assert content.count(old) == 1, "Unexpected original Android application suffix"
-          gradle.write_text(content.replace(old, 'applicationIdSuffix = ".suiteautolod"'), encoding="utf-8")
+          gradle.write_text(content.replace(old, 'applicationIdSuffix = ".suitehandoff"'), encoding="utf-8")
           manifest = Path("AnimRetargetAndroid/app/src/main/AndroidManifest.xml")
           ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
           tree = ET.parse(manifest)
           namespace = "{http://schemas.android.com/apk/res/android}label"
           app = tree.getroot().find("application")
           assert app is not None
-          app.set(namespace, "Phoenix Forge ONE AutoLOD TEST")
+          app.set(namespace, "Phoenix Forge ONE HANDOFF TEST")
           for activity in app.findall("activity"):
               if activity.get("{http://schemas.android.com/apk/res/android}name") == "com.animretarget.app.StudioWebActivity":
-                  activity.set(namespace, "Phoenix Forge ONE AutoLOD TEST")
+                  activity.set(namespace, "Phoenix Forge ONE HANDOFF TEST")
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
           PY
           echo "android_application_suffix=.suiteautolod" >> /tmp/phoenix-source-revisions.txt

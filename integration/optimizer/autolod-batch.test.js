@@ -19,7 +19,8 @@ test('failed quality result aborts entire batch and disposes previous results',a
  const all=fixture([30000,30000]);let disposed=0,n=0;
  const fn=(g,target)=>{
   n++;
-  return n===2?{promise:Promise.resolve({reason:'Повреждён силуэт'}),cancel(){}}:
+  return g.value===30000 && n>1?
+   {promise:Promise.resolve({reason:'Повреждён силуэт'}),cancel(){}}:
    {promise:Promise.resolve({geometry:{dispose(){disposed++}},triangles:target}),cancel(){}};
  };
  await assert.rejects(optimizeCharacterInBackground(all,12000,()=>({}),()=>{},fn).promise,/силуэт/);
@@ -36,11 +37,36 @@ test('morph/locked meshes remain untouched in atomic whole-character run',async(
 test('cannot silently claim requested budget if simplifier exceeds its allocation',async()=>{
  const all=fixture([60000]);
  await assert.rejects(optimizeCharacterInBackground(all,12000,()=>({}),()=>{},
-  (g,target)=>({promise:Promise.resolve({geometry:{dispose(){}},triangles:target+100}),cancel(){}})).promise,/недостижим/);
+  (g,target)=>({promise:Promise.resolve({geometry:{dispose(){}},triangles:target+100}),cancel(){}})).promise,/ни один безопасный уровень/);
 });
 test('already optimized requires no worker',async()=>{
  const all=fixture([6000,4000]);
  const result=await optimizeCharacterInBackground(all,12000,()=>{},()=>{},
   ()=>{throw Error('must not run')}).promise;
  assert.equal(result.already,true);
+});
+
+test('when 25k fails surface gate, AutoLOD finds safer <=50k instead of returning nothing',async()=>{
+ const all=fixture([1200000]);
+ const seen=[];
+ let disposed=0;
+ const mock=(g,goal,opts)=>{
+  seen.push({goal,error:opts.qemError});
+  // Pretend the low mesh gets rejected by geometric QA, 35k+ passes.
+  if(goal<35000)return {promise:Promise.resolve({reason:'Сохранение объёма: ошибка поверхности'}),cancel(){}};
+  return {promise:Promise.resolve({geometry:{dispose(){disposed++}},triangles:goal}),cancel(){}};
+ };
+ const out=await optimizeCharacterInBackground(all,25000,()=>({qemError:.025}),()=>{},mock).promise;
+ assert.equal(out.candidates.length,1);
+ assert.ok(out.total>=35000 && out.total<=50000);
+ assert.equal(out.approximate,true);
+ assert.ok(seen.some(a=>a.goal===25000));
+ assert.equal(all[0].mesh.geometry.value,1200000,'original untouched');
+});
+test('50k hard ceiling remains, even if a slower quality variant needs more',async()=>{
+ const all=fixture([1000000]);
+ const mock=(g,goal)=>({promise:Promise.resolve({reason:'Защита формы не позволяет '+goal}),cancel(){}});
+ await assert.rejects(optimizeCharacterInBackground(all,50000,()=>({}),()=>{},mock).promise,
+   /ни один безопасный уровень/);
+ assert.equal(all[0].mesh.geometry.value,1000000);
 });

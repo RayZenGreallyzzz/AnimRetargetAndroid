@@ -115,3 +115,30 @@ test('an editor with actual local unsaved changes must not silently checkout new
  assert.equal(rig.loadCalls.length,1,'Dirty Rig must keep local unexported bones');
  assert.equal(rig.window.PhoenixSync.getState().dirty,true);
 });
+
+test('Character importer readiness prevents false model-loaded confirmation',async()=>{
+ const native=createNative(),blob=Buffer.from('glTF-character-with-rig');
+ const file={name:'woman.glb',size:blob.length,slice(a,b){
+  const bytes=blob.subarray(a,b);return {arrayBuffer:async()=>Uint8Array.from(bytes).buffer}
+ }};
+ const optimize=mountEditor('optimize',native,file);
+ optimize.docEvents.change({target:optimize.input,isTrusted:true});
+ await wait();await wait();
+ const char=mountEditor('character',native);
+ const load=char.window.PhoenixSuite.useWorkspaceFile;
+ let ready=false;
+ char.window.PhoenixSuite.useWorkspaceFile=async(...args)=>{
+  if(!ready)throw Error('Character ещё не готов');
+  return load(...args);
+ };
+ char.fireReady();await wait();
+ assert.equal(char.window.PhoenixSync.getState().hasModel,false,
+   'an import failure must not masquerade as a loaded character');
+ assert.equal(char.window.PhoenixSync.getState().revision,-1);
+ ready=true;
+ char.winEvents['phoenix:character-import-ready']();
+ await wait();
+ assert.equal(char.window.PhoenixSync.getState().hasModel,true);
+ assert.equal(char.window.PhoenixSync.getState().revision,1);
+ assert.equal(char.loadCalls[0].inputId,'base-file');
+});

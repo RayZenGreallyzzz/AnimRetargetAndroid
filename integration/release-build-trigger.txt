@@ -66,3 +66,5 @@ Fix: JS sync now auto-checkouts newer active GLB on WebView reactivation unless 
 Phoenix ONE AutoLOD test build 2026-10-31: whole-character budget 12k-50k, BVH surface gate, atomic rollback and cross-tab GLB handoff. Trigger isolated feature APK; do not overwrite integrated baseline.
 
 Isolated AutoLOD TEST APK trigger: 2026-10-31. Package applicationIdSuffix=.suiteautolod, app label Phoenix Forge ONE AutoLOD TEST. Side-by-side with existing Forge ONE.
+
+2026-10-31 Phoenix Forge ONE HANDOFF TEST: Await real Character GLB import; retry AutoLOD with quality gate <=50k; evict inactive WebGL when switching and before native Retarget; separate applicationIdSuffix=.suitehandoff.

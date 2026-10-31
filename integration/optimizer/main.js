@@ -501,7 +501,9 @@ $('simplify').onclick=async()=>{
     });
     const batch=optimizeCharacterInBackground(entries,target,buildOptions,step=>{
       msg('AutoLOD: '+step.current+'/'+step.count+' · '+step.mesh+
-        ' · '+fmt(step.before)+' → '+fmt(step.target)+' △ · можно отменить');
+        ' · '+fmt(step.before)+' → '+fmt(step.target)+' △'+
+        (step.approximate?' (сохраняем форму)':'')+
+        ' · попытка '+step.attempt+' · можно отменить');
     });
     activeBatch=batch;$('simplify').textContent='✕ Отменить расчёт';
     try{
@@ -515,7 +517,10 @@ $('simplify').onclick=async()=>{
       $('compare').textContent='Сравнение: ПОСЛЕ (показать ДО)';
       selectedStats();updateCapsules();
       msg('Автооптимизация ВСЕГО персонажа: '+fmt(result.plan.original)+' → '+
-        fmt(result.total)+' треугольников, цель '+fmt(target)+'. '+
+        fmt(result.total)+' △. '+
+        (result.approximate
+          ? 'Цель '+fmt(target)+' △ была слишком строгой для сохранения формы; выбрана более щадящая сетка в пределах 50 000 △. '
+          : 'Цель '+fmt(target)+' △ достигнута. ')+
         'Сравни фигуру с оригиналом, затем нажми «Применить».');
     }catch(error){
       if(activeBatch!==batch)return;
