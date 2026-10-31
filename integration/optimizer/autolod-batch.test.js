@@ -37,7 +37,7 @@ test('morph/locked meshes remain untouched in atomic whole-character run',async(
 test('cannot silently claim requested budget if simplifier exceeds its allocation',async()=>{
  const all=fixture([60000]);
  await assert.rejects(optimizeCharacterInBackground(all,12000,()=>({}),()=>{},
-  (g,target)=>({promise:Promise.resolve({geometry:{dispose(){}},triangles:target+100}),cancel(){}})).promise,/недостижим/);
+  (g,target)=>({promise:Promise.resolve({geometry:{dispose(){}},triangles:target+100}),cancel(){}})).promise,/ни один безопасный уровень/);
 });
 test('already optimized requires no worker',async()=>{
  const all=fixture([6000,4000]);
