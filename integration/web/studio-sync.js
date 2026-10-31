@@ -134,6 +134,12 @@
       window.dispatchEvent(new CustomEvent("phoenix:shared-model-loaded",{detail:{
         name:active.name,revision:active.revision,tool
       }}));
+      // Notify native code ONLY after Character has really parsed the GLB
+      // and mounted a skinned 3D mesh; it can now free the old Rig WebView.
+      if(tool==="character" && typeof bridge.editorLoaded==="function"){
+        try{bridge.editorLoaded(tool,active.revision)}
+        catch(e){console.warn("Character handoff ack:",e)}
+      }
     } catch(err) {
       lastError = err?.message || String(err);
       warn("Не удалось синхронизировать модель: " + lastError);
