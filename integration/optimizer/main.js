@@ -19,13 +19,13 @@ const ui=[
 '<label>Загрузить GLB<input id="opt-model-file" type="file" accept=".glb"/></label>',
 '<div id="stats">Нет модели</div>',
 '<label>Меш<select id="meshes"></select></label>',
-'<label>Цель: треугольники<select id="presets"><option value="5000">5 000</option><option value="10000">10 000</option><option value="20000" selected>20 000</option><option value="40000">40 000</option><option value="custom">Своя</option></select></label>',
-'<label>Своя цель<input id="target" type="number" value="20000" min="64" step="100"/></label>',
+'<label>Цель: треугольники выбранного меша<select id="presets"><option value="12000">12 000</option><option value="25000" selected>25 000</option><option value="35000">35 000</option><option value="50000">50 000</option><option value="custom">Своя</option></select></label>',
+'<label>Своя цель<input id="target" type="number" value="25000" min="12000" max="50000" step="1000"/></label>',
 '<label>Способ упрощения<select id="method"><option value="qem">QEM — качественное упрощение (рекомендуется)</option><option value="cluster">Кластеризация — экспериментальная</option></select></label>',
 '<label>Точность QEM<select id="qem-quality"><option value="0.01">Максимальная защита формы</option><option value="0.025" selected>Сбалансированная</option><option value="0.075">Более сильное упрощение</option></select></label>',
 '<label class="toggle"><input id="qem-attributes" type="checkbox" checked/> Учитывать UV атлас и нормали при выборе граней</label>',
-'<h4>🛡️ Защитить лицо, волосы и мелкие детали</h4>',
-'<p>Включи кисть и коснись лица, волос, ремней или украшений. Выбранные вершины не удаляются при QEM. Сфера захватывает соседние слои.</p>',
+'<h4>🛡️ Необязательная кисть для отдельных деталей</h4>',
+'<p>Автооптимизация работает БЕЗ кисти. Ручная защита нужна только при необходимости и может помешать достичь выбранной цели.</p>',
 '<label>Радиус защиты: <span id="detail-radius-value">4%</span> высоты меша<input id="detail-radius" type="range" min=".005" max=".20" step=".005" value=".04"/></label>',
 '<label>Действие<select id="detail-mode"><option value="protect">Защитить вершины</option><option value="erase">Стереть защиту</option></select></label>',
 '<div class="buttons"><button id="detail-brush">🖌 Включить защиту</button><button id="detail-clear">Сбросить защиту</button></div>',
@@ -35,9 +35,9 @@ const ui=[
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
 '<label class="toggle"><input id="limit-textures" type="checkbox"/> Сжать текстуры до 2048 px при экспорте (снижение качества)</label>',
 '<label class="toggle"><input id="wireframe" type="checkbox"/> Показывать сетку поверх модели</label>',
-'<div class="buttons"><button id="simplify" class="primary">Предпросмотр удаления вершин</button><button id="undo">Отменить предпросмотр</button></div>',
+'<div class="buttons"><button id="simplify" class="primary">Автооптимизация (предпросмотр)</button><button id="undo">Отменить предпросмотр</button></div>',
 '<button id="compare" disabled>Сравнить: ДО / ПОСЛЕ</button>',
-'<p>Проверка UV учитывает размер текстуры и KHR_texture_transform. Цель 20 000 для сложного атласа может быть недостижима без перепекания текстур. Это кластеризация, а не полноценная ретопология Tripo.</p>',
+'<p>QEM автоматически проверяет реальное отклонение поверхности и отклоняет сильную деформацию. Цель 12–50 тыс. задаётся для выбранного меша, НЕ для всей модели: общий бюджет персонажа будет отдельным этапом. На сложной сетке достичь цели без потери качества может быть невозможно.</p>',
 '<h3>02 / Запекание normal map (с тяжёлой модели на лёгкую)</h3>',
 '<p>После QEM-предпросмотра перенеси рельеф тяжёлой сетки в normal map. Работает офлайн, оригинальный GLB не меняется. Это не запекание цвета.</p>',
 '<label>Разрешение карты<select id="bake-size"><option value="128">128 px — быстро</option><option value="256" selected>256 px</option><option value="512">512 px — детальнее</option></select></label>',
@@ -325,7 +325,7 @@ function cancelPending(){
   if(activeOptimization){
     const task=activeOptimization;
     activeOptimization=null;task.cancel();
-    $('simplify').textContent='Предпросмотр удаления вершин';
+    $('simplify').textContent='Автооптимизация (предпросмотр)';
     $('simplify').disabled=false;
   }
   if(!pending)return;
@@ -428,7 +428,7 @@ $('simplify').onclick=async()=>{
   if(normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала закончи или отмени запекание текстур.');
   if(activeOptimization){
     const task=activeOptimization;activeOptimization=null;task.cancel();
-    $('simplify').textContent='Предпросмотр удаления вершин';
+    $('simplify').textContent='Автооптимизация (предпросмотр)';
     msg('Расчёт отменён. Исходная геометрия сохранена.');return;
   }
   const mesh=selected();if(!mesh)return msg('Сначала загрузи GLB.');
@@ -439,7 +439,7 @@ $('simplify').onclick=async()=>{
   disableDetailPainting();clearDetailOverlay();
   cancelPending();
   const target=Number($('target').value);
-  if(!Number.isInteger(target)||target<64)return msg('Задай целевое число треугольников не менее 64.');
+  if(!Number.isInteger(target)||target<12000||target>50000)return msg('Укажи цель от 12 000 до 50 000 треугольников.');
   const existing=Math.floor((mesh.geometry.index?.count||mesh.geometry.getAttribute('position').count)/3);
   if(target>=existing)return msg('Выбранный меш уже соответствует цели: '+fmt(existing)+' ≤ '+fmt(target)+'. Если весь персонаж тяжелее, выбери другой меш в списке выше.');
   if(target<existing*.08)msg('Очень сильное упрощение: цель меньше 8% исходных граней. Проверь лицо, волосы, ремни и одежду.');
@@ -471,8 +471,10 @@ $('simplify').onclick=async()=>{
     msg((result.method?.includes('Meshoptimizer')?'QEM: ':'Кластеризация: ')+'Пробная сетка: '+fmt(result.originalTriangles)+' → '+fmt(result.triangles)+
       ' треугольников, цель '+fmt(target)+'.'+
       ' · отклонение '+(result.targetErrorPercent>0?'+':'')+result.targetErrorPercent+
-      '%; макс. сдвиг вершин '+result.maxMovementPercent+'% диагонали, UV до '+
-      result.maxUvMovementTexels+' пикселей.'+
+      '%; '+(Number.isFinite(result.surfaceMaxPercent)?
+       'реальное макс. отклонение поверхности '+result.surfaceMaxPercent+'% диагонали, среднее RMS '+result.surfaceRmsPercent+'%.' :
+       'проверка отклонения поверхности недоступна для этого метода.')+
+      ' UV до '+result.maxUvMovementTexels+' пикселей.'+
       (Math.abs(result.targetErrorPercent)>15?' ВНИМАНИЕ: цель достигнута неточно, проверь результат.':'')+
       ' Исходник сохранён; нажми «Применить» или «Отменить».');
   }catch(e){
@@ -480,7 +482,7 @@ $('simplify').onclick=async()=>{
     msg('Ошибка оптимизации: '+e.message);
   }finally{
     if(activeOptimization===job)activeOptimization=null;
-    if(!activeOptimization)$('simplify').textContent='Предпросмотр удаления вершин';
+    if(!activeOptimization)$('simplify').textContent='Автооптимизация (предпросмотр)';
   }
 };
 $('guard').onclick=()=>{
