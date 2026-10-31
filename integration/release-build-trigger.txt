@@ -64,3 +64,5 @@ Fix: JS sync now auto-checkouts newer active GLB on WebView reactivation unless 
 2026-10-31 Phoenix Forge ONE release gate repair: GitHub Actions plain YAML run unexpectedly folded hotfix and Retarget patch into one command. Split to explicit shell block and fail-closed verification; rebuild full APK and confirm Retarget GLB output into shared workspace. This is a real previously missing binary integration fix.
 
 Phoenix ONE AutoLOD test build 2026-10-31: whole-character budget 12k-50k, BVH surface gate, atomic rollback and cross-tab GLB handoff. Trigger isolated feature APK; do not overwrite integrated baseline.
+
+Isolated AutoLOD TEST APK trigger: 2026-10-31. Package applicationIdSuffix=.suiteautolod, app label Phoenix Forge ONE AutoLOD TEST. Side-by-side with existing Forge ONE.
