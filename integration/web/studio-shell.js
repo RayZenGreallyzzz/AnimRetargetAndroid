@@ -160,11 +160,12 @@
     const exportReady=button && !button.disabled &&
       !!(button.getClientRects?.().length);
     if(!exportReady){
-      if(state.dirty){
-        throw Error("У Rig есть несохранённые изменения, а экспорт ещё недоступен. Закончи расчёт весов и открой шаг «Анимации → Экспорт», затем повтори переход.");
+      let active=null;
+      try{active=JSON.parse(call("getActiveFileJson")||"{}")}catch{}
+      if(state.dirty || (state.hasModel && active?.origin==="optimize" && next!=="optimize")){
+        throw Error("Rig ещё не сохранил персонажа со скелетом в общий GLB. Открой «Анимации → Экспорт», выбери «GLB / Полная модель + анимации» и повтори переход.");
       }
-      // No edits: the shared GLB is already current. No need to export
-      // a blank skeleton or demo from the uninitialized Rig editor.
+      // No edits, previously committed shared GLB: don't export a blank demo.
       return;
     }
     // Always transfer the current complete skinned mesh (not skeleton-only or FBX).
