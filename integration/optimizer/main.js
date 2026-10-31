@@ -7,6 +7,7 @@ import {describe,simplifyGeometry,getBindCapsules,guardSkinToCapsules} from './m
 import {readClothProtection} from './cloth-mask.js';
 import {paintDetailSphere,countLocked} from './detail-locks.js';
 import {optimizeInBackground} from './optimizer-background.js';
+import {optimizeCharacterInBackground} from './autolod-batch.js';
 import {setupNormalBaker} from './normal-bake-ui.js';
 import {setupPbrBaker} from './pbr-bake-ui.js';
 import './style.css';
@@ -18,7 +19,8 @@ const ui=[
 '<h3>01 / Геометрия</h3>',
 '<label>Загрузить GLB<input id="opt-model-file" type="file" accept=".glb"/></label>',
 '<div id="stats">Нет модели</div>',
-'<label>Меш<select id="meshes"></select></label>',
+'<label>Меш для просмотра и редактирования<select id="meshes"></select></label>',
+'<label>Область оптимизации<select id="opt-scope"><option value="all" selected>Весь персонаж — общий бюджет треугольников</option><option value="selected">Только выбранный меш</option></select></label>',
 '<label>Цель: треугольники выбранного меша<select id="presets"><option value="12000">12 000</option><option value="25000" selected>25 000</option><option value="35000">35 000</option><option value="50000">50 000</option><option value="custom">Своя</option></select></label>',
 '<label>Своя цель<input id="target" type="number" value="25000" min="12000" max="50000" step="1000"/></label>',
 '<label>Способ упрощения<select id="method"><option value="qem">QEM — качественное упрощение (рекомендуется)</option><option value="cluster">Кластеризация — экспериментальная</option></select></label>',
@@ -30,14 +32,14 @@ const ui=[
 '<label>Действие<select id="detail-mode"><option value="protect">Защитить вершины</option><option value="erase">Стереть защиту</option></select></label>',
 '<div class="buttons"><button id="detail-brush">🖌 Включить защиту</button><button id="detail-clear">Сбросить защиту</button></div>',
 '<p id="detail-status">Защищено 0 вершин. Маска работает только для текущего шага оптимизации.</p>',
-'<p>Цель действует на выбранный меш, не на весь GLB. Волосы, одежда и тело могут быть разными мешами. Общее число треугольников смотри в статистике.</p>',
+'<p>По умолчанию общая цель действует на ВСЕ меши персонажа. Волосы, одежда и тело получают части единого бюджета. Кисть не нужна. Переключатель выше позволяет отдельно оптимизировать один меш.</p>',
 '<label class="toggle"><input id="uv" type="checkbox" checked/> Защищать UV и текстуры</label>',
 '<label class="toggle"><input id="joint" type="checkbox" checked/> Защищать переходы весов</label>',
 '<label class="toggle"><input id="limit-textures" type="checkbox"/> Сжать текстуры до 2048 px при экспорте (снижение качества)</label>',
 '<label class="toggle"><input id="wireframe" type="checkbox"/> Показывать сетку поверх модели</label>',
 '<div class="buttons"><button id="simplify" class="primary">Автооптимизация (предпросмотр)</button><button id="undo">Отменить предпросмотр</button></div>',
 '<button id="compare" disabled>Сравнить: ДО / ПОСЛЕ</button>',
-'<p>QEM автоматически проверяет реальное отклонение поверхности и отклоняет сильную деформацию. Цель 12–50 тыс. задаётся для выбранного меша, НЕ для всей модели: общий бюджет персонажа будет отдельным этапом. На сложной сетке достичь цели без потери качества может быть невозможно.</p>',
+'<p>AutoLOD QEM измеряет отклонение поверхности и отклоняет чрезмерные изменения формы. 12–50 тыс. — цель для ВСЕГО персонажа в режиме «Весь персонаж». Если сохранить форму при таком бюджете нельзя, исходник остаётся без изменений.</p>',
 '<h3>02 / Запекание normal map (с тяжёлой модели на лёгкую)</h3>',
 '<p>После QEM-предпросмотра перенеси рельеф тяжёлой сетки в normal map. Работает офлайн, оригинальный GLB не меняется. Это не запекание цвета.</p>',
 '<label>Разрешение карты<select id="bake-size"><option value="128">128 px — быстро</option><option value="256" selected>256 px</option><option value="512">512 px — детальнее</option></select></label>',
@@ -86,7 +88,7 @@ const grid=new THREE.GridHelper(8,16,0x3e4858,0x3e4858);scene.add(grid);
 const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const exporter=new GLTFExporter();
 let character=null,animations=[],meshes=[],pending=null,playing=false,mixer=null;
-let activeOptimization=null;
+let activeOptimization=null,activeBatch=null,pendingBatch=null;
 const originals=new Map(),capsuleGroup=new THREE.Group();
 let weightDots=null,wireOverlay=null;
 const detailMasks=new WeakMap();let detailPainting=false,detailOverlay=null;
@@ -201,9 +203,11 @@ function selectedStats(){
     if(!node?.geometry||!option)continue;
     const geometry=node.geometry,faceCount=Math.floor(
       (geometry.index?.count||geometry.getAttribute('position')?.count||0)/3);
-    const inPreview=pending?.mesh===node;
+    const batchItem=pendingBatch?.candidates?.find(item=>item.mesh===node);
+    const inPreview=pending?.mesh===node || !!batchItem;
+    const candidate=batchItem?.geometry||pending?.geometry;
     const stage=inPreview
-      ?(geometry===pending.geometry?' · ПОСЛЕ (предпросмотр)':' · ДО (предпросмотр)')
+      ?(geometry===candidate?' · ПОСЛЕ (предпросмотр)':' · ДО (предпросмотр)')
       :originals.has(node)?' · ИЗМЕНЁН':'';
     option.textContent=meshes[i].name+' · '+fmt(faceCount)+' △'+stage;
   }
@@ -328,6 +332,20 @@ function cancelPending(){
     $('simplify').textContent='Автооптимизация (предпросмотр)';
     $('simplify').disabled=false;
   }
+  if(activeBatch){
+    const batch=activeBatch;activeBatch=null;batch.cancel();
+    $('simplify').textContent='Автооптимизация (предпросмотр)';
+  }
+  if(pendingBatch){
+    for(const part of pendingBatch.candidates){
+      if(part.mesh.geometry===part.geometry)part.mesh.geometry=part.before;
+      part.geometry.dispose();
+    }
+    pendingBatch=null;
+    $('compare').disabled=true;
+    selectedStats();updateCapsules();
+    msg('Предпросмотр всего персонажа отменён. Оригинал сохранён.');
+  }
   if(!pending)return;
   pbrBaker.clear(pending.mesh);
   normalBaker.clear(pending.mesh);
@@ -338,7 +356,20 @@ function cancelPending(){
   msg('Предпросмотр отменён, сетка не изменена.');
 }
 function apply(){
-  if(activeOptimization||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала заверши расчёт геометрии или карт PBR.');
+  if(activeOptimization||activeBatch||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала заверши расчёт геометрии или карт PBR.');
+  if(pendingBatch){
+    for(const part of pendingBatch.candidates){
+      if(!originals.has(part.mesh))originals.set(part.mesh,part.before);
+      else if(part.before!==originals.get(part.mesh))part.before.dispose();
+      part.mesh.geometry=part.geometry;
+      detailMasks.delete(part.mesh);
+    }
+    const count=pendingBatch.candidates.length;
+    pendingBatch=null;disableDetailPainting();clearDetailOverlay();
+    $('compare').disabled=true;selectedStats();updateCapsules();
+    msg('AutoLOD применён ко всему персонажу: '+count+' мешей. Теперь можно экспортировать GLB или перейти к Rig.');
+    return;
+  }
   if(!pending)return msg('Сначала создай предпросмотр.');
   const {mesh,geometry,type,before}=pending;
   if(!originals.has(mesh))originals.set(mesh,before);
@@ -397,7 +428,8 @@ $('opt-model-file').onchange=async e=>{
     loader.parse(buffer,'',gltf=>setModel(gltf,file.name),e=>msg('Ошибка GLB: '+e.message));
   }catch(e){msg('Импорт не удался: '+e.message);}
 };
-$('meshes').onchange=()=>{disableDetailPainting();cancelPending();updateBones();selectedStats();updateDetailOverlay();};
+$('meshes').onchange=()=>{disableDetailPainting();if(!pendingBatch)cancelPending();updateBones();selectedStats();updateDetailOverlay();};
+$('opt-scope').onchange=()=>{cancelPending();msg($('opt-scope').value==='all'?'Автооптимизация всего персонажа без кисти.':'Оптимизация только выбранного меша.');};
 $('presets').onchange=()=>{
   if($('presets').value!=='custom')$('target').value=$('presets').value;
 };
@@ -414,6 +446,13 @@ $('capsules').onchange=updateCapsules;
 $('weightmap').onchange=updateCapsules;
 $('wireframe').onchange=updateWire;
 $('compare').onclick=()=>{
+  if(pendingBatch){
+    const showAfter=!pendingBatch.showAfter;
+    for(const part of pendingBatch.candidates)part.mesh.geometry=showAfter?part.geometry:part.before;
+    pendingBatch.showAfter=showAfter;
+    $('compare').textContent=showAfter?'Сравнение: ПОСЛЕ (показать ДО)':'Сравнение: ДО (показать ПОСЛЕ)';
+    selectedStats();updateCapsules();return;
+  }
   if(!pending)return;
   const showingAfter=pending.mesh.geometry===pending.geometry;
   pending.mesh.geometry=showingAfter?pending.before:pending.geometry;
@@ -426,12 +465,65 @@ $('compare').onclick=()=>{
 };
 $('simplify').onclick=async()=>{
   if(normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала закончи или отмени запекание текстур.');
+  if(activeBatch){
+    const batch=activeBatch;activeBatch=null;batch.cancel();
+    $('simplify').textContent='Автооптимизация (предпросмотр)';
+    msg('AutoLOD отменён. Исходная модель не изменена.');return;
+  }
   if(activeOptimization){
     const task=activeOptimization;activeOptimization=null;task.cancel();
     $('simplify').textContent='Автооптимизация (предпросмотр)';
     msg('Расчёт отменён. Исходная геометрия сохранена.');return;
   }
   const mesh=selected();if(!mesh)return msg('Сначала загрузи GLB.');
+  if($('opt-scope').value==='all'){
+    cancelPending();disableDetailPainting();clearDetailOverlay();
+    const target=Number($('target').value);
+    if(!Number.isInteger(target)||target<12000||target>50000)
+      return msg('Укажи общую цель от 12 000 до 50 000 треугольников.');
+    const supported=new Set(['position','normal','uv','uv1','uv2','color','skinIndex','skinWeight','tangent']);
+    const entries=meshes.filter(({node})=>node?.geometry?.getAttribute('position')).map(item=>{
+      const node=item.node,g=node.geometry,p=g.getAttribute('position');
+      const triangles=Math.floor((g.index?.count||p.count)/3);
+      const morph=Object.values(g.morphAttributes||{}).some(a=>a?.length);
+      const cloth=readClothProtection(node);
+      const extra=Object.keys(g.attributes).some(k=>!supported.has(k));
+      const reason=morph?'Есть морфы':g.groups.length>1?'Несколько материалов':
+       cloth.hasMask?'Защита ткани':extra?'Нестандартные атрибуты':
+       (!!g.getAttribute('skinIndex')!==!!g.getAttribute('skinWeight'))?'Повреждённые веса':'';
+      return {mesh:node,name:item.name,triangles,locked:!!reason,reason};
+    });
+    if(!entries.length)return msg('В GLB нет мешей для оптимизации.');
+    const buildOptions=node=>({
+      method:'qem',qemError:Number($('qem-quality').value),attributeAware:$('qem-attributes').checked,
+      preserveUV:$('uv').checked,protectSkin:$('joint').checked,protectedVertices:null,
+      ...textureSafety(node)
+    });
+    const batch=optimizeCharacterInBackground(entries,target,buildOptions,step=>{
+      msg('AutoLOD: '+step.current+'/'+step.count+' · '+step.mesh+
+        ' · '+fmt(step.before)+' → '+fmt(step.target)+' △ · можно отменить');
+    });
+    activeBatch=batch;$('simplify').textContent='✕ Отменить расчёт';
+    try{
+      const result=await batch.promise;
+      if(activeBatch!==batch){for(const c of result.candidates||[])c.geometry.dispose();return;}
+      activeBatch=null;
+      if(result.already)return msg('Весь персонаж уже содержит '+fmt(result.total)+' △ — меньше заданной цели.');
+      pendingBatch={candidates:result.candidates,showAfter:true};
+      for(const c of result.candidates)c.mesh.geometry=c.geometry;
+      $('compare').disabled=false;
+      $('compare').textContent='Сравнение: ПОСЛЕ (показать ДО)';
+      selectedStats();updateCapsules();
+      msg('Автооптимизация ВСЕГО персонажа: '+fmt(result.plan.original)+' → '+
+        fmt(result.total)+' треугольников, цель '+fmt(target)+'. '+
+        'Сравни фигуру с оригиналом, затем нажми «Применить».');
+    }catch(error){
+      if(activeBatch!==batch)return;
+      activeBatch=null;
+      msg('AutoLOD отклонён без повреждения оригинала: '+error.message);
+    }finally{if(activeBatch===batch)activeBatch=null;if(!activeBatch)$('simplify').textContent='Автооптимизация (предпросмотр)';}
+    return;
+  }
   const cloth=readClothProtection(mesh);
   if(cloth.hasMask)return msg('У этого меша есть защита одежды. Упрощение изменит номера вершин. Сначала создай отдельную копию без маски в Character.');
   if($('method').value!=='qem'&&countLocked(currentDetailMask(mesh))>0)
@@ -486,7 +578,7 @@ $('simplify').onclick=async()=>{
   }
 };
 $('guard').onclick=()=>{
-  if(activeOptimization||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала закончи оптимизацию или запекание.');
+  if(activeOptimization||activeBatch||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Сначала закончи оптимизацию или запекание.');
   const mesh=selected();
   if(!mesh?.isSkinnedMesh)return msg('Выбери отдельный скинненный меш персонажа или одежды.');
   const protection=readClothProtection(mesh);
@@ -513,9 +605,9 @@ $('undo').onclick=cancelPending;
 $('reset').onclick=restore;
 async function saveOptimizeToShared(){
  if(normalBaker.isBusy()||pbrBaker.isBusy())return false;
- if(activeOptimization){msg('Сначала закончи или отмени расчёт оптимизации.');return false}
+ if(activeOptimization||activeBatch){msg('Сначала закончи или отмени расчёт оптимизации.');return false}
  if(!character){msg('Сначала загрузи модель GLB.');return false}
- if(pending){msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');return false}
+ if(pending||pendingBatch){msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');return false}
  if(!window.PhoenixSuite?.saveBlob){msg('Общее хранилище доступно только в Android Forge.');return false}
  try{
   playing=false;
@@ -542,9 +634,9 @@ window.PhoenixOptimizeSave=saveOptimizeToShared;
 window.PhoenixOptimizeCommit=commitOptimizedToRig;
 $('opt-next-rig').onclick=commitOptimizedToRig;
 $('export').onclick=async()=>{
-  if(activeOptimization||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Дождись завершения расчёта или нажми отмену.');
+  if(activeOptimization||activeBatch||normalBaker.isBusy()||pbrBaker.isBusy())return msg('Дождись завершения расчёта или нажми отмену.');
   if(!character)return msg('Нет модели для экспорта.');
-  if(pending)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
+  if(pending||pendingBatch)return msg('Сначала нажми «Применить» либо «Отменить предпросмотр».');
   try{
     playing=false;msg('Сохраняю GLB...');
     const options={binary:true,trs:true,animations,onlyVisible:false};
