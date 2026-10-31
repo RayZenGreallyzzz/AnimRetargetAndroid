@@ -71,6 +71,20 @@ class StudioWebActivity : Activity() {
             onPause()
             visibility = android.view.View.GONE
         }
+        // Android tablets with 4 GB RAM cannot reliably keep three heavy
+        // WebGL scenes plus the native Retarget activity resident. Previous
+        // editor has already published a full shared GLB through the
+        // save-before-navigation contract. Reopen from that GLB when revisited.
+        if (bridge.latestActiveGlb() != null && next != selected) {
+            val staleKeys = views.keys.filter { it != next }.toList()
+            for (key in staleKeys) {
+                val stale = views.remove(key) ?: continue
+                container.removeView(stale)
+                stale.stopLoading()
+                stale.removeJavascriptInterface("PhoenixNative")
+                stale.destroy()
+            }
+        }
         val web = views[next] ?: createEditor(next).also {
             views[next] = it
             container.addView(it, FrameLayout.LayoutParams(
